@@ -1,0 +1,71 @@
+name: sgl-web
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sgl-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - sgl-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build: ./backend
+    container_name: sgl-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - sgl-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_FORCE_HTTPS: ${VITE_FORCE_HTTPS:-false}
+    container_name: sgl-frontend
+    restart: unless-stopped
+    environment:
+      FORCE_HTTPS: ${FORCE_HTTPS:-false}
+    ports:
+      - "8080:80"
+      - "443:443"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - sgl-net
+
+volumes:
+  pgdata:
+  uploads:
+
+networks:
+  sgl-net:
+    driver: bridge
