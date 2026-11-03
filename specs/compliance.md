@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
-**Última revisión:** 2026-11-04  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), specs.
+**Última revisión:** 2026-11-05  
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), specs.
 
 ## Resultado global
 
@@ -15,6 +15,9 @@
 | RBAC por permisos y redirección por rol | **Implementado** (HU-COM-14) |
 | Auditoría de acceso append-only | **Implementada** (HU-COM-14, CA-12) |
 | CRUD de usuarios sincronizado con Samba AD | **Implementado** (HU-COM-02) |
+| Autenticación de PC cliente Windows (Kerberos) | **Parcial** (KDC/DNS listos; `sgl-win` en NAT, sin unir) |
+| GPO y perfil por rol | **Pendiente** (sin OUs/GPOs SGL) |
+| Registro de sesión de PC | **Parcial** (`sesion_activa` existe; 0 filas, sin agente) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
 
@@ -102,6 +105,36 @@ detalle. La contraseña nunca se almacena ni se audita.
 | Admin Técnico crea/edita | Permitido |
 | Registro en `auditoria` | `CREAR`/`ACTUALIZAR` por cada operación |
 
+## HU-COM-01 — estado de criterios de aceptación
+
+Leyenda: ✅ cumple · 🟡 parcial · ⏳ pendiente de implementación/verificación.
+
+| CA | Requisito | Estado | Evidencia / brecha |
+|---|---|---|---|
+| CA-01 | Validación contra Samba AD (LDAP/Kerberos) | ✅ | `ldap.service.js` + `auth.service.js` (LDAPS); probado 2026-11-04. |
+| CA-02 | Sesión/JWT con rol y permisos | ✅ | JWT con `uid`, `rol`, `permisos`, `jti`; `sesion_web` revocable. |
+| CA-03 | Error sin información sensible | 🟡 | Credenciales inválidas → 401 genérico; 403 de rol/sin acceso revela que la cuenta existe. Falta decidir si se unifica a 401. |
+| CA-04 | Kerberos/LDAP en PC cliente | ⏳ | KDC (88/tcp), LDAP/LDAPS y SRV listos; `sgl-win` está en NAT y no unida al dominio. |
+| CA-05 | Perfil y GPO por rol | ⏳ | Sin OUs ni GPOs SGL; `samba-tool gpo listall` solo muestra las políticas por defecto. |
+| CA-06 | Registro de sesión (usuario, PC, hora) | 🟡 | Web auditada (`sesion_web` + `evento_autenticacion`); `sesion_activa` tiene 0 filas y no hay agente de logon. |
+| CA-07 | Error genérico en PC | 🟡 | Windows/AD lo hace nativamente; falta probarlo con la PC unida. |
+| CA-08 | LDAPS backend–Samba AD | ✅ | `ldaps://dc.clockwork.local:636` + CA + `rejectUnauthorized=true`. |
+| CA-09 | Tickets Kerberos en PC | ⏳ | KDC/SRV activos; falta verificar `klist`/TGT en la PC cliente. |
+| CA-10 | Respuesta API con rol | ✅ | `POST /api/auth/login` devuelve token, usuario, permisos y sesión. |
+| CA-11 | Sin contraseñas en texto plano | ✅ | `usuario` no tiene columna de contraseña; bind LDAP en memoria; `.env` solo guarda credencial de servicio. |
+
+**Resumen HU-COM-01:** 5 CA cumplidos · 3 parciales · 3 pendientes.
+
+**Brechas principales:**
+
+1. **PC cliente:** `sgl-win` está en NAT; debe pasar a la red interna `sgl`, tomar DHCP de `192.168.100.58` y unirse a `clockwork.local`.
+2. **Grupos/OUs/GPO:** no hay grupos AD de rol ni GPOs SGL. Falta crear `SGL-AdminAcademico`, `SGL-AdminTecnico`, `SGL-Docente`, `SGL-Estudiante`, OUs y GPO por rol.
+3. **Perfil:** definir perfil local por defecto, móvil o obligatorio. La animación de primer inicio se desactiva con `EnableFirstLogonAnimation=0`.
+4. **Sesión de PC:** `sesion_activa` existe pero no se registra al logon; falta endpoint de agente, autenticación máquina–API y script/GPO o servicio en la PC.
+5. **CA-03:** decidir entre 401 genérico para todos los fallos o mantener 403 para cuentas válidas sin rol.
+
+El detalle y el plan están en `specs/hu-01.md`.
+
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -119,7 +152,7 @@ detalle. La contraseña nunca se almacena ni se audita.
 | RN-007 | Cubierta (BD) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo` | Validación en API |
 | RN-008 | Cubierta (BD) | `permiso_app_grupo.habilitado DEFAULT FALSE` | Forzarlo en el servicio |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) | Auditar apps, permisos, despliegues y listas blancas desde la API |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02); login web auditado | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
 | RN-011 | Cubierta (BD + bootstrap) | `grupo.codigo UNIQUE`; `GRP-1A` creado en Samba AD y BD | Validación en API de grupos |
 | RN-012 | Cubierta (BD + bootstrap) | `membresia_grupo` N:M; estudiante demo en `GRP-1A` | Sincronización automática desde la API |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
@@ -128,8 +161,8 @@ detalle. La contraseña nunca se almacena ni se audita.
 | RN-016 | Parcial | Tabla `lista_blanca_url` por grupo | Unión de listas + proxy/firewall |
 | RN-017 | Parcial | Docente limitado a sus grupos en `/users`, `/dashboard/summary` y `/monitoring/overview` | Validación antes de abrir KVM/MeshCentral |
 | RN-018 | Parcial (infra) | Samba AD y Docker operativos | MeshCentral |
-| RN-019 | Parcial (infra) | Administración por `enp0s3` (Ethernet) | Bloqueo explícito de WiFi |
-| RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017) | Registro automático al login de la PC |
+| RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
+| RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
 **Resumen:** 6 cubiertas · 8 parciales · 6 pendientes.
 
@@ -143,6 +176,10 @@ detalle. La contraseña nunca se almacena ni se audita.
 6. **RN-017/RN-020:** HU-COM-14 implementa la parte de consulta y autorización; la apertura de KVM y el registro automático de sesión desde la PC quedan para sus HU.
 7. **HU-COM-02 — contraseñas:** Samba AD mantiene la contraseña anterior válida durante `old password allowed period` (60 min por defecto). Se configuró `old password allowed period = 0` en `/etc/samba/smb.conf` para que el cambio sea inmediato; respaldo en `smb.conf.bak-hu02`.
 8. **HU-COM-02 — trigger de auditoría:** la migración `03-hu02-auth-fk.sql` permite solo la anonimización de `evento_autenticacion.usuario_id` (`ON DELETE SET NULL`) al eliminar una cuenta; `UPDATE`/`DELETE` generales siguen bloqueados.
+9. **HU-COM-01 — alcance:** la parte web (CA-01/02/08/10/11) ya está cubierta por HU-COM-14. El trabajo pendiente es la PC cliente Windows (CA-04/09), la carga de perfil/GPO por rol (CA-05) y el registro de sesión de PC (CA-06).
+10. **HU-COM-01 — estado de la PC:** la VM `sgl-win` está en **NAT**, no en la red interna `sgl`. Por eso no toma DHCP de `192.168.100.58` y no puede unirse al dominio. Debe cambiarse a la red interna `sgl` antes de probar CA-04/CA-07/CA-09.
+11. **HU-COM-01 — GPO/sesiones:** `samba-tool gpo listall` solo muestra las políticas por defecto; no hay OUs ni GPOs SGL. `sesion_activa` existe pero tiene **0 filas**; falta el agente/script de logon.
+12. **RN-019 — desvío de infraestructura:** el adaptador puente `enp0s3` está sobre Wi-Fi (`Intel Wi-Fi 6 AX201`) y `enp0s8` es una red interna virtual de VirtualBox. Para cumplir RN-019 en producción, la administración y la red de laboratorio deben ir por Ethernet, no por Wi-Fi.
 
 ## Qué significa "Cubierta (BD)"
 

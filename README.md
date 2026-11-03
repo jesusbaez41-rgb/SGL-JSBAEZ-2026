@@ -112,7 +112,16 @@ docker compose up -d --build
 
 Las reglas RN-001 a RN-020 son normativas y obligatorias. Ver
 `specs/business-rules.md`, el estado en `specs/compliance.md`, la HU de
-autenticación en `specs/hu-14.md` y la de cuentas en `specs/hu-02.md`.
+autenticación web en `specs/hu-14.md`, la de cuentas en `specs/hu-02.md` y la
+de autenticación web + PC cliente en `specs/hu-01.md`.
+
+## Autenticación de PC cliente (HU-COM-01)
+
+La autenticación web está cubierta por HU-COM-14. La autenticación de PCs
+Windows contra Samba AD (Kerberos), la carga de perfil/GPO por rol y el registro
+de sesión de PC están especificados en `specs/hu-01.md`. Queda pendiente unir la
+PC a la red interna `sgl`, crear grupos/OUs/GPO por rol y registrar el
+logon/logoff en `sesion_activa`.
 
 ## Gestión de usuarios (HU-COM-02)
 
