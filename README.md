@@ -77,7 +77,7 @@ sgl-web/
 ├─ db/migrations/   02-hu14-auth.sql (sesiones y auditoría)
 │                    03-hu02-auth-fk.sql (anonimización de eventos)
 ├─ scripts/         bootstrap-hu14.sh · meshcentral-bridge.js
-├─ docs/            meshcentral.md
+├─ docs/            meshcentral.md · agent-windows.md
 └─ specs/           reglas de negocio, cumplimiento y HU
 ```
 
@@ -157,3 +157,5 @@ MeshCentral se publica en `/mesh/`:
 - Desde el Win10 en la red `sgl`: <http://192.168.100.58:8080/mesh/>
 
 La instalación y el bridge están documentados en `docs/meshcentral.md`.
+La instalación del agente Windows como servicio para todos los usuarios está en
+`docs/agent-windows.md`.
