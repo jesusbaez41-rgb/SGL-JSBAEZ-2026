@@ -43,7 +43,31 @@ sudo apt-get update
 sudo apt-get install -y nodejs npm
 node -v
 npm -v
+```
 
+> Si `apt` se queda lento o se corta (pasó en este servidor), usar el binario
+> oficial de Node.js; queda en `/usr/local/bin/node`:
+>
+> ```bash
+> cd /tmp
+> curl -fsSL -o node-v22.22.1-linux-x64.tar.xz \
+>   https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-x64.tar.xz
+> sudo tar -xJf node-v22.22.1-linux-x64.tar.xz -C /usr/local --strip-components=1
+> node -v
+> npm -v
+> ```
+>
+> Si la conexión SSH se corta durante `npm install`, lanzarlo como servicio
+> transitorio para que sobreviva:
+>
+> ```bash
+> sudo systemd-run --unit=meshcentral-install --uid=sgl --gid=sgl \
+>   --working-directory=/opt/meshcentral \
+>   /usr/local/bin/npm install meshcentral --no-audit --no-fund --omit=dev --prefer-offline
+> systemctl status meshcentral-install --no-pager
+> ```
+
+```bash
 sudo useradd --system --home /opt/meshcentral --shell /usr/sbin/nologin meshcentral 2>/dev/null || true
 sudo mkdir -p /opt/meshcentral
 sudo chown sgl:sgl /opt/meshcentral
@@ -120,7 +144,7 @@ Type=simple
 User=meshcentral
 Group=meshcentral
 WorkingDirectory=/opt/meshcentral
-ExecStart=/usr/bin/node /opt/meshcentral/node_modules/meshcentral --host 172.18.0.1
+ExecStart=/usr/local/bin/node /opt/meshcentral/node_modules/meshcentral --host 172.18.0.1
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
@@ -212,6 +236,10 @@ MESH_USER=sglbridge
 MESH_PASS=CAMBIAR_POR_PASSWORD
 ```
 
+> En este laboratorio se usó `MESH_PASS=SglBridge2026!x9`; el usuario
+> `sglbridge` debe crearse en MeshCentral con esa contraseña (o cambiar ambos
+> valores y reiniciar el bridge).
+
 `/etc/systemd/system/sgl-mesh-bridge.service`:
 
 ```ini
@@ -225,7 +253,7 @@ Type=simple
 User=meshcentral
 Group=meshcentral
 EnvironmentFile=/etc/sgl-mesh-bridge.env
-ExecStart=/usr/bin/node /opt/meshcentral/meshcentral-bridge.js
+ExecStart=/usr/local/bin/node /opt/meshcentral/meshcentral-bridge.js
 Restart=always
 RestartSec=5
 
