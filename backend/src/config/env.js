@@ -44,6 +44,10 @@ const env = {
   ldapTlsServername: process.env.LDAP_TLS_SERVERNAME || 'dc.clockwork.local',
   ldapTlsRejectUnauthorized: String(process.env.LDAP_TLS_REJECT_UNAUTHORIZED || 'true') !== 'false',
 
+  // HU-COM-03: bridge local que consulta MeshCentral
+  meshApiUrl: process.env.MESH_API_URL || '',
+  meshApiToken: process.env.MESH_API_TOKEN || '',
+
   corsOrigin: process.env.CORS_ORIGIN || '*',
 };
 

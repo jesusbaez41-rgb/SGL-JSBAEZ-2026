@@ -8,6 +8,7 @@ interface MenuItem {
   label: string
   to: string
   permission: string
+  external?: boolean
 }
 
 interface MenuSection {
@@ -43,6 +44,7 @@ const sections: MenuSection[] = [
     items: [
       { label: 'Laboratorios', to: '/laboratorios', permission: 'labs:read' },
       { label: 'Equipos', to: '/equipos', permission: 'equipment:read' },
+      { label: 'MeshCentral', to: '/mesh/', permission: 'equipment:manage', external: true },
       { label: 'Aplicaciones', to: '/aplicaciones', permission: 'apps:read' },
       { label: 'Despliegues', to: '/despliegues', permission: 'deployments:read' },
       { label: 'Políticas', to: '/politicas', permission: 'policies:read' },
@@ -114,25 +116,35 @@ function go(to: string) {
           <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
             {{ section.title }}
           </p>
-          <button
-            v-for="item in section.items"
-            :key="item.to"
-            type="button"
-            class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium transition"
-            :class="
-              route.path === item.to
-                ? 'bg-sgl-50 text-sgl-700'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-            "
-            @click="go(item.to)"
-          >
-            {{ item.label }}
-          </button>
+          <template v-for="item in section.items" :key="item.to">
+            <a
+              v-if="item.external"
+              :href="item.to"
+              target="_blank"
+              rel="noopener"
+              class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              {{ item.label }} ↗
+            </a>
+            <button
+              v-else
+              type="button"
+              class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium transition"
+              :class="
+                route.path === item.to
+                  ? 'bg-sgl-50 text-sgl-700'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              "
+              @click="go(item.to)"
+            >
+              {{ item.label }}
+            </button>
+          </template>
         </div>
       </nav>
 
       <div class="border-t border-slate-200 p-4 text-xs text-slate-400">
-        <p>SGL Web v0.2.0 · HU-COM-14</p>
+        <p>SGL Web v0.3.0 · HU-COM-03</p>
         <p class="mt-1">CLOCKWORK.LOCAL</p>
       </div>
     </aside>

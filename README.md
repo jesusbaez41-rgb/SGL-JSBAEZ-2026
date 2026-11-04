@@ -76,7 +76,8 @@ sgl-web/
 ├─ db/init/         01-init.sql (esquema SGL)
 ├─ db/migrations/   02-hu14-auth.sql (sesiones y auditoría)
 │                    03-hu02-auth-fk.sql (anonimización de eventos)
-├─ scripts/         bootstrap-hu14.sh
+├─ scripts/         bootstrap-hu14.sh · meshcentral-bridge.js
+├─ docs/            meshcentral.md
 └─ specs/           reglas de negocio, cumplimiento y HU
 ```
 
@@ -97,6 +98,14 @@ sgl-web/
 | `GET` | `/api/dashboard/summary` | `dashboard:read` |
 | `GET` | `/api/audit/events` | `audit:read` |
 | `GET` | `/api/monitoring/overview` | `monitoring:read` |
+| `GET` | `/api/labs` | `labs:read` |
+| `POST` | `/api/labs` | `labs:manage` |
+| `PATCH` | `/api/labs/:id` | `labs:manage` |
+| `GET` | `/api/equipment` | `equipment:read` |
+| `POST` | `/api/equipment` | `equipment:manage` |
+| `PATCH` | `/api/equipment/:id` | `equipment:manage` |
+| `POST` | `/api/equipment/sync` | `equipment:manage` |
+| `POST` | `/api/equipment/:id/refresh` | `equipment:manage` |
 
 ## Comandos útiles
 
@@ -134,3 +143,17 @@ deshabilita en AD y se revocan sus sesiones web.
 El cambio de contraseña se aplica por LDAPS. El DC tiene configurado
 `old password allowed period = 0` en `/etc/samba/smb.conf` para invalidar la
 contraseña anterior de inmediato.
+
+## Laboratorios y equipos (HU-COM-03)
+
+El Admin Técnico registra laboratorios y equipos desde **Laboratorios** y
+**Equipos**. Cada equipo exige un laboratorio (RN-001), MAC y hostname únicos
+(CA-05). El estado/IP/usuario se sincroniza desde **MeshCentral** con
+`Equipos → Sincronizar estado`.
+
+MeshCentral se publica en `/mesh/`:
+
+- Desde el host: <http://192.168.0.50:8080/mesh/>
+- Desde el Win10 en la red `sgl`: <http://192.168.100.58:8080/mesh/>
+
+La instalación y el bridge están documentados en `docs/meshcentral.md`.

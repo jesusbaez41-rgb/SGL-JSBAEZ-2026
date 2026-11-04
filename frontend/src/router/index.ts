@@ -63,13 +63,13 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'laboratorios',
         name: 'laboratorios',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/labs/LabsView.vue'),
         meta: { permission: 'labs:read', title: 'Laboratorios' },
       },
       {
         path: 'equipos',
         name: 'equipos',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/equipment/EquipmentView.vue'),
         meta: { permission: 'equipment:read', title: 'Equipos' },
       },
       {

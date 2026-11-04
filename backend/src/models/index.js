@@ -7,6 +7,10 @@ const SesionWeb = require('./sesionWeb.model');
 const EventoAutenticacion = require('./eventoAutenticacion.model');
 const Auditoria = require('./auditoria.model');
 
+// HU-COM-03: un laboratorio tiene muchos equipos y cada equipo pertenece a uno.
+Laboratorio.hasMany(Equipo, { foreignKey: 'laboratorio_id', as: 'equipos' });
+Equipo.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+
 module.exports = {
   sequelize,
   Usuario,

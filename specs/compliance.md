@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
 **Última revisión:** 2026-11-05  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), specs.
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), specs.
 
 ## Resultado global
 
@@ -18,6 +18,8 @@
 | Autenticación de PC cliente Windows (Kerberos) | **Parcial** (KDC/DNS listos; `sgl-win` en NAT, sin unir) |
 | GPO y perfil por rol | **Pendiente** (sin OUs/GPOs SGL) |
 | Registro de sesión de PC | **Parcial** (`sesion_activa` existe; 0 filas, sin agente) |
+| Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 pendiente de agente MeshCentral) |
+| MeshCentral + `/mesh` | **Parcial** (servicio/reverse proxy en instalación; agente pendiente) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
 
@@ -135,6 +137,28 @@ Leyenda: ✅ cumple · 🟡 parcial · ⏳ pendiente de implementación/verifica
 
 El detalle y el plan están en `specs/hu-01.md`.
 
+## HU-COM-03 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Registrar nombre, ubicación y subred | ✅ | `POST /api/labs`, tabla `laboratorio` |
+| CA-02 | Validar subred IPv4/CIDR | ✅ | `labs.validators.js` + trigger `tg_laboratorio_subred_valida` |
+| CA-03 | Listar laboratorios ordenados con detalle | ✅ | `GET /api/labs` (orden por nombre + conteo de equipos) |
+| CA-04 | Equipo obligatoriamente asociado a un laboratorio | ✅ | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; API valida |
+| CA-05 | MAC y hostname únicos | ✅ | `uq_equipo_mac`, `uq_equipo_hostname`; normalización + 409 |
+| CA-06 | Estado/IP/usuario desde MeshCentral | 🟡 | Bridge `/devices` + `POST /api/equipment/sync` y `/:id/refresh`; falta probar con el agente instalado |
+
+**Resumen HU-COM-03:** 5 CA cumplidos · 1 parcial.
+
+**Pendiente CA-06:**
+
+1. Terminar la instalación de MeshCentral y publicar `/mesh/`.
+2. Crear la cuenta de administración y el usuario del bridge.
+3. Instalar el agente en el Win10 (que debe estar en la red interna `sgl`).
+4. Ejecutar `Equipos → Sincronizar estado` y verificar estado/IP/usuario.
+
+El detalle está en `specs/hu-03.md` y la instalación en `docs/meshcentral.md`.
+
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -143,16 +167,16 @@ El detalle y el plan están en `specs/hu-01.md`.
 
 | Regla | Estado | Evidencia verificada | Falta |
 |---|---|---|---|
-| RN-001 | Cubierta (BD) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT` | Validación en API/UI |
+| RN-001 | Cubierta (BD + API/UI) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio y la UI lo exige | — |
 | RN-002 | Pendiente | — | Verificar vínculo app-lab antes de desplegar |
 | RN-003 | Pendiente | — | Generar despliegue para todas las PCs activas |
 | RN-004 | Pendiente | — | Cálculo de permisos por grupo + laboratorio |
 | RN-005 | Pendiente | — | Integración MeshAgent como servicio |
-| RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error` | Reintento individual y masivo |
+| RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03) | Reintento individual y masivo de despliegues |
 | RN-007 | Cubierta (BD) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo` | Validación en API |
 | RN-008 | Cubierta (BD) | `permiso_app_grupo.habilitado DEFAULT FALSE` | Forzarlo en el servicio |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02); login web auditado | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos (HU-COM-03) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
 | RN-011 | Cubierta (BD + bootstrap) | `grupo.codigo UNIQUE`; `GRP-1A` creado en Samba AD y BD | Validación en API de grupos |
 | RN-012 | Cubierta (BD + bootstrap) | `membresia_grupo` N:M; estudiante demo en `GRP-1A` | Sincronización automática desde la API |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
@@ -180,6 +204,9 @@ El detalle y el plan están en `specs/hu-01.md`.
 10. **HU-COM-01 — estado de la PC:** la VM `sgl-win` está en **NAT**, no en la red interna `sgl`. Por eso no toma DHCP de `192.168.100.58` y no puede unirse al dominio. Debe cambiarse a la red interna `sgl` antes de probar CA-04/CA-07/CA-09.
 11. **HU-COM-01 — GPO/sesiones:** `samba-tool gpo listall` solo muestra las políticas por defecto; no hay OUs ni GPOs SGL. `sesion_activa` existe pero tiene **0 filas**; falta el agente/script de logon.
 12. **RN-019 — desvío de infraestructura:** el adaptador puente `enp0s3` está sobre Wi-Fi (`Intel Wi-Fi 6 AX201`) y `enp0s8` es una red interna virtual de VirtualBox. Para cumplir RN-019 en producción, la administración y la red de laboratorio deben ir por Ethernet, no por Wi-Fi.
+13. **HU-COM-03 — laboratorios/equipos:** CRUD implementado con validación de subred, laboratorio obligatorio, unicidad de MAC/hostname y auditoría. CA-06 (estado desde MeshCentral) está implementado con bridge + UI, pendiente de probar con el agente instalado.
+14. **MeshCentral:** instalado como servicio systemd en `/opt/meshcentral` (fuera de los 3 contenedores de SGL), publicado en `/mesh/` vía Nginx y con bridge local en `172.18.0.1:4444`. Guía en `docs/meshcentral.md`.
+15. **Acceso web tras el cambio de red:** desde el host usar `http://192.168.0.50:8080/`; desde el Win10 en `sgl`, `http://192.168.100.58:8080/`. La IP `192.168.100.58` ya no es alcanzable desde el host porque no está en la red `sgl`.
 
 ## Qué significa "Cubierta (BD)"
 

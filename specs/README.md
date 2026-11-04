@@ -12,6 +12,7 @@ Es **normativa vinculante**: cualquier cambio en el sistema debe respetarla.
 | `hu-14.md` | HU-COM-14: autenticación, sesión, RBAC, auditoría y pruebas. |
 | `hu-02.md` | HU-COM-02: CRUD y sincronización de cuentas con Samba AD. |
 | `hu-01.md` | HU-COM-01: autenticación web + PC cliente, Kerberos, GPO y sesión centralizada. |
+| `hu-03.md` | HU-COM-03: laboratorios, equipos y estado desde MeshCentral. |
 
 ## Flujo obligatorio antes de implementar
 

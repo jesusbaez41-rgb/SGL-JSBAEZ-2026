@@ -35,6 +35,8 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - sgl-net
     healthcheck:
@@ -59,6 +61,8 @@ services:
     depends_on:
       backend:
         condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - sgl-net
 
