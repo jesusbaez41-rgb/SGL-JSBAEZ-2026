@@ -81,7 +81,7 @@ async function onSaved(item: Equipment) {
   const action = editing.value ? 'actualizado' : 'registrado'
   showModal.value = false
   editing.value = null
-  success.value = `Equipo ${item.hostname} ${action} correctamente.`
+  success.value = `Equipo ${item?.hostname || 'equipo'} ${action} correctamente.`
   await load()
 }
 
@@ -106,13 +106,19 @@ async function refreshOne(item: Equipment) {
   success.value = ''
   try {
     const updated = await equipmentApi.refresh(item.id)
-    const index = equipment.value.findIndex((row) => row.id === item.id)
-    if (index >= 0) equipment.value[index] = updated
 
-    if (updated.mesh_encontrado === false) {
-      error.value = `El equipo ${item.hostname} no está registrado en MeshCentral.`
+    if (updated && updated.id) {
+      const index = equipment.value.findIndex((row) => row.id === item.id)
+      if (index >= 0) equipment.value[index] = updated
+
+      if (updated.mesh_encontrado === false) {
+        error.value = `El equipo ${item.hostname} no está registrado en MeshCentral.`
+      } else {
+        success.value = `Estado de ${item.hostname} actualizado desde MeshCentral.`
+      }
     } else {
-      success.value = `Estado de ${item.hostname} actualizado desde MeshCentral.`
+      await load()
+      error.value = 'MeshCentral devolvió una respuesta incompleta; se recargó el listado.'
     }
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'No se pudo consultar MeshCentral.'

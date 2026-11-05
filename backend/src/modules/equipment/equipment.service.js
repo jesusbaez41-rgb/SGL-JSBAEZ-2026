@@ -170,7 +170,8 @@ async function get(req, id) {
   if (rows.length === 0) {
     throw httpError(404, 'Equipo no encontrado.', 'EQUIPO_NO_ENCONTRADO');
   }
-  return mergeMesh(rows)[0];
+  const merged = await mergeMesh(rows);
+  return merged[0];
 }
 
 async function ensureLab(laboratorioId) {
