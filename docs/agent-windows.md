@@ -3,6 +3,19 @@
 **Objetivo:** instalar el agente una sola vez en la PC, como **servicio de
 Windows**, para que afecte a todos los usuarios y arranque con el equipo.
 
+## Descarga directa desde SGL
+
+El instalador ya está generado para el grupo `SGL-Lab`:
+
+- Desde el Win10 en la red `sgl`: <http://192.168.100.58:8080/mesh/instalador>
+- Desde el host: <http://192.168.0.50:8080/mesh/instalador>
+- HTTPS: <https://192.168.100.58/mesh/instalador> (aceptar el certificado)
+- Archivo: `meshagent64-SGL-Lab.exe` (3.4 MB)
+
+Usar la URL sin barra final; si se agrega `/` al final, Nginx redirige al
+archivo correcto. El instalador se sirve desde el volumen
+`frontend/static` y sobrevive a los rebuild del frontend.
+
 ## 1. Descargar el agente correcto
 
 En MeshCentral:

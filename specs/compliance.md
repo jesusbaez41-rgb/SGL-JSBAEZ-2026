@@ -157,6 +157,8 @@ El detalle y el plan están en `specs/hu-01.md`.
 3. Instalar el agente en el Win10 (que debe estar en la red interna `sgl`).
 4. Ejecutar `Equipos → Sincronizar estado` y verificar estado/IP/usuario.
 
+El instalador Windows para `SGL-Lab` quedó publicado en `/mesh/instalador`
+(`meshagent64-SGL-Lab.exe`, 3.4 MB) y se sirve desde `frontend/static`.
 El detalle está en `specs/hu-03.md` y la instalación en `docs/meshcentral.md`.
 
 ## Leyenda RN

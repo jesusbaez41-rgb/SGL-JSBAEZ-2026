@@ -1,0 +1,4 @@
+services:
+  frontend:
+    volumes:
+      - ./frontend/static:/usr/share/nginx/html/static:ro

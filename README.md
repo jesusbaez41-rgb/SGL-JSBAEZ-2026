@@ -158,4 +158,5 @@ MeshCentral se publica en `/mesh/`:
 
 La instalación y el bridge están documentados en `docs/meshcentral.md`.
 La instalación del agente Windows como servicio para todos los usuarios está en
-`docs/agent-windows.md`.
+`docs/agent-windows.md`. El instalador ya generado se descarga desde
+`/mesh/instalador` (`meshagent64-SGL-Lab.exe`, 3.4 MB).

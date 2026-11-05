@@ -5,6 +5,7 @@ dist/
 !.env.example
 *.log
 *.key
+frontend/static/*.exe
 backend/uploads/*
 !backend/uploads/.gitkeep
 .DS_Store
