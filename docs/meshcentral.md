@@ -26,7 +26,8 @@ al inventario de SGL.
 | Instalador Windows x64 | `/mesh/instalador` → `meshagent64-SGL-Lab.exe` (3.4 MB) |
 | Bridge SGL | Activo en `172.18.0.1:4444` |
 | Backend SGL | `MESH_API_URL=http://host.docker.internal:4444` |
-| Agente Win10 | Instalado; conecta desde `192.168.100.100`; falta reiniciar el servicio tras corregir el hash del certificado |
+| Agente Win10 | Instalado y conectado (`sgl-win`, `192.168.100.100`, usuario `CLOCKWORK\luan`) |
+| Equipo en SGL | `sgl-win` sincronizado: ENCENDIDO, IP `192.168.100.100`, usuario `CLOCKWORK\luan` |
 
 ### URLs útiles
 
@@ -456,9 +457,14 @@ curl -H "x-api-key: TOKEN_COMPARTIDO" http://172.18.0.1:4444/devices
 En `/opt/sgl-web/.env`:
 
 ```ini
-MESH_API_URL=http://host.docker.internal:4444
+MESH_API_URL=http://172.18.0.1:4444
 MESH_API_TOKEN=TOKEN_COMPARTIDO
 ```
+
+> **Importante:** no usar `host.docker.internal`. En este entorno resuelve a
+> `172.17.0.1` (bridge por defecto de Docker), pero el bridge de SGL escucha en
+> `172.18.0.1` (gateway de `sgl-net`). Con `host.docker.internal` el backend
+> devuelve `fetch failed`.
 
 ```bash
 cd /opt/sgl-web
@@ -512,6 +518,8 @@ El backend consulta el bridge al listar equipos y al ejecutar
 | Agente instalado pero no se ve | Servicio no reiniciado tras `certhash` | `net stop/start "mesh agent"` |
 | Host no puede abrir la web | Usa `192.168.100.58` desde el host | Usar `http://192.168.0.50:8080` |
 | Win10 no llega al servidor | Adaptador en NAT | Cambiar a red interna `sgl` |
+| SGL: `No se pudo consultar MeshCentral: fetch failed` | `host.docker.internal` resuelve a `172.17.0.1` y el bridge escucha en `172.18.0.1` | `MESH_API_URL=http://172.18.0.1:4444` y recrear backend |
+| Equipo no se actualiza aunque el agente conecta | Hostname del equipo distinto al `name` de MeshCentral | Editar el equipo en SGL con el hostname real (`sgl-win`) |
 
 ---
 
@@ -549,20 +557,14 @@ En el servidor, el log debe mostrar `Agent connected` y **no** el mensaje
 
 ## 6. Pendientes / siguientes pasos
 
-1. **Reiniciar el agente en el Win10** tras el cambio de `certhash`:
-   ```cmd
-   net stop "mesh agent"
-   net start "mesh agent"
-   ```
-2. Confirmar que la PC aparece en **MeshCentral → SGL-Lab**.
-3. En SGL, registrar el equipo con el **hostname/MAC reales** del Win10 o
-   editar `pc-lab01`, y ejecutar **Equipos → Sincronizar estado**.
-4. Cambiar las contraseñas de laboratorio (`sgladmin`, bridge, token) antes de
+1. **Verificado:** el agente `sgl-win` conectó y el equipo se sincronizó en SGL
+   (`ENCENDIDO`, `192.168.100.100`, usuario `CLOCKWORK\luan`).
+2. Cambiar las contraseñas de laboratorio (`sgladmin`, bridge, token) antes de
    producción.
-5. Revocar el token de GitHub usado para subir el repositorio.
-6. Para producción, valorar Ethernet en lugar de Wi-Fi (RN-019) y certificados
+3. Revocar el token de GitHub usado para subir el repositorio.
+4. Para producción, valorar Ethernet en lugar de Wi-Fi (RN-019) y certificados
    TLS válidos.
-7. Programar backup de `/opt/meshcentral/meshcentral-data` y de la base SGL.
+5. Programar backup de `/opt/meshcentral/meshcentral-data` y de la base SGL.
 
 ---
 

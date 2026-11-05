@@ -18,8 +18,8 @@
 | Autenticación de PC cliente Windows (Kerberos) | **Parcial** (KDC/DNS listos; `sgl-win` en NAT, sin unir) |
 | GPO y perfil por rol | **Pendiente** (sin OUs/GPOs SGL) |
 | Registro de sesión de PC | **Parcial** (`sesion_activa` existe; 0 filas, sin agente) |
-| Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 pendiente de agente MeshCentral) |
-| MeshCentral + `/mesh` | **Parcial** (servicio/reverse proxy en instalación; agente pendiente) |
+| Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 verificado con `sgl-win`) |
+| MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
 
@@ -129,7 +129,7 @@ Leyenda: ✅ cumple · 🟡 parcial · ⏳ pendiente de implementación/verifica
 
 **Brechas principales:**
 
-1. **PC cliente:** `sgl-win` está en NAT; debe pasar a la red interna `sgl`, tomar DHCP de `192.168.100.58` y unirse a `clockwork.local`.
+1. **PC cliente:** `sgl-win` ya está en la red interna `sgl` (IP `192.168.100.100`, sesión `CLOCKWORK\luan`); faltan las GPO por rol y la verificación Kerberos/GPO.
 2. **Grupos/OUs/GPO:** no hay grupos AD de rol ni GPOs SGL. Falta crear `SGL-AdminAcademico`, `SGL-AdminTecnico`, `SGL-Docente`, `SGL-Estudiante`, OUs y GPO por rol.
 3. **Perfil:** definir perfil local por defecto, móvil o obligatorio. La animación de primer inicio se desactiva con `EnableFirstLogonAnimation=0`.
 4. **Sesión de PC:** `sesion_activa` existe pero no se registra al logon; falta endpoint de agente, autenticación máquina–API y script/GPO o servicio en la PC.
@@ -146,16 +146,20 @@ El detalle y el plan están en `specs/hu-01.md`.
 | CA-03 | Listar laboratorios ordenados con detalle | ✅ | `GET /api/labs` (orden por nombre + conteo de equipos) |
 | CA-04 | Equipo obligatoriamente asociado a un laboratorio | ✅ | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; API valida |
 | CA-05 | MAC y hostname únicos | ✅ | `uq_equipo_mac`, `uq_equipo_hostname`; normalización + 409 |
-| CA-06 | Estado/IP/usuario desde MeshCentral | 🟡 | Bridge `/devices` + `POST /api/equipment/sync` y `/:id/refresh`; falta probar con el agente instalado |
+| CA-06 | Estado/IP/usuario desde MeshCentral | ✅ | Bridge `/devices` + sync verificado: `sgl-win` ENCENDIDO, `192.168.100.100`, usuario `CLOCKWORK\luan` |
 
-**Resumen HU-COM-03:** 5 CA cumplidos · 1 parcial.
+**Resumen HU-COM-03:** 6 CA cumplidos · 0 pendientes.
 
-**Pendiente CA-06:**
+**Verificación CA-06:**
 
-1. Terminar la instalación de MeshCentral y publicar `/mesh/`.
-2. Crear la cuenta de administración y el usuario del bridge.
-3. Instalar el agente en el Win10 (que debe estar en la red interna `sgl`).
-4. Ejecutar `Equipos → Sincronizar estado` y verificar estado/IP/usuario.
+1. MeshCentral activo y publicado en `/mesh/`.
+2. Cuenta `sgladmin` y grupo `SGL-Lab` creados.
+3. Agente instalado en el Win10 (`sgl-win`) y conectado.
+4. `Equipos → Sincronizar estado` actualizó estado/IP/usuario correctamente.
+
+> El backend debe usar `MESH_API_URL=http://172.18.0.1:4444`.
+> `host.docker.internal` resuelve a `172.17.0.1`, donde el bridge no escucha,
+> y produce `fetch failed`.
 
 El instalador Windows para `SGL-Lab` quedó publicado en `/mesh/instalador`
 (`meshagent64-SGL-Lab.exe`, 3.4 MB) y se sirve desde `frontend/static`.

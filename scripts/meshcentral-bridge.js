@@ -86,11 +86,12 @@ function normalizeDevice(device) {
     : device.users || device.user || null;
 
   return {
-    nodeid: device.nodeid || null,
-    hostname: String(device.host || device.name || device.rname || ''),
-    ip_address: device.ip || null,
+    nodeid: device._id || device.nodeid || null,
+    hostname: String(device.name || device.rname || device.host || '').toLowerCase(),
+    ip_address: device.ip || device.host || null,
     estado: connected ? 'ENCENDIDO' : 'APAGADO',
-    ultimo_reporte: device.lastconnect || device.lastConnect || null,
+    ultimo_reporte:
+      device.lastconnect || device.lastConnect || device.agct || device.firstconnect || null,
     usuario_actual: users,
   };
 }
