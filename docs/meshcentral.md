@@ -25,9 +25,11 @@ al inventario de SGL.
 | meshid | `JDJ3dJ5AB8e8Bi@3h@EIMbxlExahO@ta10w3455j53GYueT1LiljIPdFO923hjNU` |
 | Instalador Windows x64 | `/mesh/instalador` → `meshagent64-SGL-Lab.exe` (3.4 MB) |
 | Bridge SGL | Activo en `172.18.0.1:4444` |
-| Backend SGL | `MESH_API_URL=http://host.docker.internal:4444` |
+| Datos del bridge | `ListDevices --details`: MAC, IP, estado, usuario, SO y último reporte |
+| Backend SGL | `MESH_API_URL=http://172.18.0.1:4444` |
 | Agente Win10 | Instalado y conectado (`sgl-win`, `192.168.100.100`, usuario `CLOCKWORK\luan`) |
-| Equipo en SGL | `sgl-win` sincronizado: ENCENDIDO, IP `192.168.100.100`, usuario `CLOCKWORK\luan` |
+| Equipo en SGL | `sgl-win` sincronizado: APAGADO/ENCENDIDO, IP `192.168.100.100`, MAC `08:00:27:DB:58:6E` |
+| Sincronización | Bajo demanda y periódica cada `MESH_SYNC_MINUTES` (5 min) |
 
 ### URLs útiles
 
@@ -412,12 +414,18 @@ curl -s -o /tmp/agent.exe -w "%{http_code} %{size_download}\n" \
 Archivo: `/opt/meshcentral/meshcentral-bridge.js` (desde
 `scripts/meshcentral-bridge.js`).
 
+El bridge usa `meshctrl ListDevices --details --json`. La variante `--details`
+incluye `net.netif2`, de donde se extrae la **MAC** de la interfaz Ethernet. La
+respuesta normalizada incluye `nodeid`, `hostname`, `mac_address`, `ip_address`,
+`estado`, `usuario_actual`, `osdesc` y `ultimo_reporte`.
+
 `/etc/sgl-mesh-bridge.env` (modo 600):
 
 ```ini
 BRIDGE_HOST=172.18.0.1
 BRIDGE_PORT=4444
 BRIDGE_TOKEN=TOKEN_COMPARTIDO
+BRIDGE_CACHE_MS=5000
 MESHCTRL_PATH=/opt/meshcentral/node_modules/meshcentral/meshctrl.js
 MESH_URL=ws://127.0.0.1:4433/mesh
 MESH_USER=sgladmin
@@ -459,7 +467,12 @@ En `/opt/sgl-web/.env`:
 ```ini
 MESH_API_URL=http://172.18.0.1:4444
 MESH_API_TOKEN=TOKEN_COMPARTIDO
+MESH_SYNC_MINUTES=5
+MESH_API_TIMEOUT_MS=8000
 ```
+
+`MESH_SYNC_MINUTES=5` activa la sincronización periódica del inventario; `0`
+la desactiva. `MESH_API_TIMEOUT_MS` limita la espera al bridge.
 
 > **Importante:** no usar `host.docker.internal`. En este entorno resuelve a
 > `172.17.0.1` (bridge por defecto de Docker), pero el bridge de SGL escucha en
@@ -540,7 +553,7 @@ curl -sI http://192.168.100.58:8080/mesh/instalador
 curl -s -o /dev/null -w "instalador: %{http_code} %{size_download}\n" \
   http://192.168.100.58:8080/mesh/instalador
 
-# Bridge
+# Bridge (debe incluir mac_address, ip_address, estado y usuario_actual)
 curl -H "x-api-key: TOKEN" http://172.18.0.1:4444/health
 curl -H "x-api-key: TOKEN" http://172.18.0.1:4444/devices
 
@@ -565,6 +578,9 @@ En el servidor, el log debe mostrar `Agent connected` y **no** el mensaje
 4. Para producción, valorar Ethernet en lugar de Wi-Fi (RN-019) y certificados
    TLS válidos.
 5. Programar backup de `/opt/meshcentral/meshcentral-data` y de la base SGL.
+6. **HU-COM-04 implementada:** el bridge devuelve MAC desde `netif2`, el backend
+   registra/actualiza PCs y la UI refresca el estado cada 30 s. Ver
+   `specs/hu-04.md`.
 
 ---
 
