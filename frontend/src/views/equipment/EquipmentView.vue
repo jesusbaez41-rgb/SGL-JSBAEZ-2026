@@ -4,6 +4,13 @@ import { useRoute } from 'vue-router'
 import { equipmentApi, type Equipment } from '../../api/equipment.api'
 import { labsApi, type Lab } from '../../api/labs.api'
 import { useAuthStore } from '../../stores/auth.store'
+import {
+  countEquipmentByStatus,
+  formatEquipmentReport,
+  formatSyncSummary,
+  hasMeshError,
+  statusLabel,
+} from '../../utils/equipmentLogic'
 import EquipmentFormModal from './EquipmentFormModal.vue'
 
 const auth = useAuthStore()
@@ -33,24 +40,14 @@ const filtered = computed(() =>
     : equipment.value,
 )
 
-const meshDown = computed(() => equipment.value.some((item) => item.mesh_error))
+const meshDown = computed(() => hasMeshError(equipment.value))
+const counts = computed(() => countEquipmentByStatus(filtered.value))
 const noLabs = computed(() => canManage.value && labs.value.length === 0)
-
-function statusLabel(status: string) {
-  if (status === 'ENCENDIDO') return 'Encendido'
-  if (status === 'APAGADO') return 'Apagado'
-  return 'Desconocido'
-}
 
 function statusClass(status: string) {
   if (status === 'ENCENDIDO') return 'bg-emerald-50 text-emerald-700'
   if (status === 'APAGADO') return 'bg-red-50 text-red-700'
   return 'bg-slate-100 text-slate-500'
-}
-
-function formatDate(value: string | null) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('es-PY')
 }
 
 async function load(silent = false) {
@@ -98,14 +95,7 @@ async function syncMesh() {
   success.value = ''
   try {
     const result = await equipmentApi.sync(selectedLab.value || undefined)
-    const parts = [
-      `${result.creados} importadas`,
-      `${result.actualizados} actualizadas`,
-    ]
-    if (result.sin_laboratorio) parts.push(`${result.sin_laboratorio} sin laboratorio`)
-    if (result.sin_mac) parts.push(`${result.sin_mac} sin MAC`)
-    if (result.errores) parts.push(`${result.errores} con error`)
-    success.value = `MeshCentral: ${parts.join(', ')} (${result.total} reportadas).`
+    success.value = formatSyncSummary(result)
     await load(true)
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'No se pudo sincronizar con MeshCentral.'
@@ -224,6 +214,21 @@ onBeforeUnmount(() => {
       </select>
     </div>
 
+    <div v-if="!loading" class="flex flex-wrap gap-2 text-xs">
+      <span class="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+        Total: {{ counts.total }}
+      </span>
+      <span class="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+        Encendidos: {{ counts.encendidos }}
+      </span>
+      <span class="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-700">
+        Apagados: {{ counts.apagados }}
+      </span>
+      <span class="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-500">
+        Desconocidos: {{ counts.desconocidos }}
+      </span>
+    </div>
+
     <div v-if="loading" class="text-sm text-slate-500">Cargando…</div>
 
     <div v-else class="sgl-card overflow-x-auto p-0">
@@ -259,7 +264,7 @@ onBeforeUnmount(() => {
               </span>
             </td>
             <td class="px-4 py-3 text-slate-600">{{ item.usuario_actual || '—' }}</td>
-            <td class="px-4 py-3 text-xs text-slate-500">{{ formatDate(item.ultimo_reporte) }}</td>
+            <td class="px-4 py-3 text-xs text-slate-500">{{ formatEquipmentReport(item.ultimo_reporte) }}</td>
             <td v-if="canManage" class="px-4 py-3 text-right">
               <div class="flex justify-end gap-2">
                 <button
