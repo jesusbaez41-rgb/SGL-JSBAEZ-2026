@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { labsApi, type Lab } from '../../api/labs.api'
+import { equipmentApi } from '../../api/equipment.api'
 import { useAuthStore } from '../../stores/auth.store'
 import LabFormModal from './LabFormModal.vue'
 
@@ -11,8 +12,10 @@ const error = ref('')
 const success = ref('')
 const showModal = ref(false)
 const editing = ref<Lab | null>(null)
+const syncingLab = ref<string | null>(null)
 
 const canManage = computed(() => auth.can('labs:manage'))
+const canSyncEquipment = computed(() => auth.can('equipment:manage'))
 
 async function load() {
   loading.value = true
@@ -42,6 +45,23 @@ async function onSaved(lab: Lab) {
   editing.value = null
   success.value = `Laboratorio ${lab.nombre} ${action} correctamente.`
   await load()
+}
+
+async function syncLab(lab: Lab) {
+  syncingLab.value = lab.id
+  error.value = ''
+  success.value = ''
+  try {
+    const result = await equipmentApi.sync(lab.id)
+    success.value =
+      `Laboratorio ${lab.nombre}: ${result.creados} PCs importadas y ` +
+      `${result.actualizados} actualizadas (${result.total} reportadas por MeshCentral).`
+    await load()
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || 'No se pudo sincronizar el laboratorio con MeshCentral.'
+  } finally {
+    syncingLab.value = null
+  }
 }
 
 onMounted(load)
@@ -99,6 +119,15 @@ onMounted(load)
                 >
                   Ver equipos
                 </RouterLink>
+                <button
+                  v-if="canSyncEquipment"
+                  class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  type="button"
+                  :disabled="syncingLab === lab.id"
+                  @click="syncLab(lab)"
+                >
+                  {{ syncingLab === lab.id ? 'Sincronizando…' : 'Sincronizar PCs' }}
+                </button>
                 <button
                   v-if="canManage"
                   class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"

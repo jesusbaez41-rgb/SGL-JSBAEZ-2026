@@ -44,9 +44,12 @@ const env = {
   ldapTlsServername: process.env.LDAP_TLS_SERVERNAME || 'dc.clockwork.local',
   ldapTlsRejectUnauthorized: String(process.env.LDAP_TLS_REJECT_UNAUTHORIZED || 'true') !== 'false',
 
-  // HU-COM-03: bridge local que consulta MeshCentral
+  // HU-COM-03 / HU-COM-04: bridge local que consulta MeshCentral
   meshApiUrl: process.env.MESH_API_URL || '',
   meshApiToken: process.env.MESH_API_TOKEN || '',
+  // HU-COM-04 / CA-08: sincronización periódica (0 desactiva el job).
+  meshSyncMinutes: Number(process.env.MESH_SYNC_MINUTES || 5),
+  meshApiTimeoutMs: Number(process.env.MESH_API_TIMEOUT_MS || 8000),
 
   corsOrigin: process.env.CORS_ORIGIN || '*',
 };

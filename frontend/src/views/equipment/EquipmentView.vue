@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { equipmentApi, type Equipment } from '../../api/equipment.api'
 import { labsApi, type Lab } from '../../api/labs.api'
@@ -13,12 +13,16 @@ const equipment = ref<Equipment[]>([])
 const labs = ref<Lab[]>([])
 const loading = ref(true)
 const error = ref('')
+const loadError = ref('')
 const success = ref('')
 const showModal = ref(false)
 const editing = ref<Equipment | null>(null)
 const syncing = ref(false)
 const busyId = ref<string | null>(null)
 const selectedLab = ref(String(route.query.lab || ''))
+const lastUpdated = ref<Date | null>(null)
+
+let refreshTimer: number | undefined
 
 const canManage = computed(() => auth.can('equipment:manage'))
 const canReadLabs = computed(() => auth.can('labs:read'))
@@ -29,6 +33,7 @@ const filtered = computed(() =>
     : equipment.value,
 )
 
+const meshDown = computed(() => equipment.value.some((item) => item.mesh_error))
 const noLabs = computed(() => canManage.value && labs.value.length === 0)
 
 function statusLabel(status: string) {
@@ -48,18 +53,20 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString('es-PY')
 }
 
-async function load() {
-  loading.value = true
-  error.value = ''
+async function load(silent = false) {
+  if (!silent) loading.value = true
+  if (!silent) loadError.value = ''
   try {
-    equipment.value = await equipmentApi.list()
+    equipment.value = await equipmentApi.list(selectedLab.value || undefined)
     if (canReadLabs.value) {
       labs.value = await labsApi.list()
     }
+    loadError.value = ''
+    lastUpdated.value = new Date()
   } catch (e: any) {
-    error.value = e?.response?.data?.error || 'No se pudieron cargar los equipos.'
+    loadError.value = e?.response?.data?.error || 'No se pudieron cargar los equipos.'
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -90,9 +97,16 @@ async function syncMesh() {
   error.value = ''
   success.value = ''
   try {
-    const result = await equipmentApi.sync()
-    success.value = `MeshCentral sincronizó ${result.actualizados} de ${result.total} equipos.`
-    await load()
+    const result = await equipmentApi.sync(selectedLab.value || undefined)
+    const parts = [
+      `${result.creados} importadas`,
+      `${result.actualizados} actualizadas`,
+    ]
+    if (result.sin_laboratorio) parts.push(`${result.sin_laboratorio} sin laboratorio`)
+    if (result.sin_mac) parts.push(`${result.sin_mac} sin MAC`)
+    if (result.errores) parts.push(`${result.errores} con error`)
+    success.value = `MeshCentral: ${parts.join(', ')} (${result.total} reportadas).`
+    await load(true)
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'No se pudo sincronizar con MeshCentral.'
   } finally {
@@ -111,7 +125,9 @@ async function refreshOne(item: Equipment) {
       const index = equipment.value.findIndex((row) => row.id === item.id)
       if (index >= 0) equipment.value[index] = updated
 
-      if (updated.mesh_encontrado === false) {
+      if (updated.mesh_error) {
+        error.value = 'MeshCentral no responde. El estado se muestra como Desconocido.'
+      } else if (updated.mesh_encontrado === false) {
         error.value = `El equipo ${item.hostname} no está registrado en MeshCentral.`
       } else {
         success.value = `Estado de ${item.hostname} actualizado desde MeshCentral.`
@@ -127,7 +143,17 @@ async function refreshOne(item: Equipment) {
   }
 }
 
-onMounted(load)
+watch(selectedLab, () => load(true))
+
+onMounted(async () => {
+  await load()
+  // CA-06/CA-08: refresco automático sin recargar la página.
+  refreshTimer = window.setInterval(() => load(true), 30000)
+})
+
+onBeforeUnmount(() => {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
+})
 </script>
 
 <template>
@@ -137,6 +163,11 @@ onMounted(load)
         <h2 class="text-xl font-bold text-slate-900">Equipos</h2>
         <p class="text-sm text-slate-500">
           Inventario de PCs vinculadas a un laboratorio. El estado se consulta a MeshCentral.
+        </p>
+        <p class="mt-1 text-xs text-slate-400">
+          Actualizado:
+          {{ lastUpdated ? lastUpdated.toLocaleTimeString('es-PY') : '—' }}
+          · refresco automático cada 30 s
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -156,7 +187,7 @@ onMounted(load)
           :disabled="syncing"
           @click="syncMesh"
         >
-          {{ syncing ? 'Sincronizando…' : 'Sincronizar estado' }}
+          {{ syncing ? 'Sincronizando…' : 'Sincronizar PCs' }}
         </button>
         <button v-if="canManage" class="sgl-btn" type="button" @click="openCreate">
           + Nuevo equipo
@@ -169,11 +200,18 @@ onMounted(load)
       <RouterLink class="font-semibold underline" to="/laboratorios">Laboratorios</RouterLink>.
     </div>
 
+    <p v-if="loadError" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+      {{ loadError }}
+    </p>
     <p v-if="error" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
       {{ error }}
     </p>
     <p v-if="success" class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
       {{ success }}
+    </p>
+    <p v-if="meshDown" class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+      MeshCentral no responde. Las PCs se muestran con estado
+      <span class="font-semibold">Desconocido</span>.
     </p>
 
     <div v-if="canReadLabs && labs.length > 0" class="flex flex-wrap items-center gap-2">
@@ -206,6 +244,7 @@ onMounted(load)
           <tr v-for="item in filtered" :key="item.id">
             <td class="px-4 py-3">
               <p class="font-mono text-xs font-medium text-slate-800">{{ item.hostname }}</p>
+              <p v-if="item.osdesc" class="text-[10px] text-slate-400">{{ item.osdesc }}</p>
               <p v-if="item.mesh_source === 'MESHCENTRAL'" class="text-[10px] font-medium text-emerald-600">
                 MeshCentral
               </p>

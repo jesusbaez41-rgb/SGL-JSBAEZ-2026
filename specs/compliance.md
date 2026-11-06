@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
 **Última revisión:** 2026-11-05  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), specs.
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), specs.
 
 ## Resultado global
 
@@ -19,6 +19,7 @@
 | GPO y perfil por rol | **Pendiente** (sin OUs/GPOs SGL) |
 | Registro de sesión de PC | **Parcial** (`sesion_activa` existe; 0 filas, sin agente) |
 | Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 verificado con `sgl-win`) |
+| Registro y monitoreo de PCs con MeshCentral (HU-COM-04) | **Implementado** (MAC/hostname/IP, sync y estado en vivo) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
@@ -165,6 +166,33 @@ El instalador Windows para `SGL-Lab` quedó publicado en `/mesh/instalador`
 (`meshagent64-SGL-Lab.exe`, 3.4 MB) y se sirve desde `frontend/static`.
 El detalle está en `specs/hu-03.md` y la instalación en `docs/meshcentral.md`.
 
+## HU-COM-04 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Instalación del agente y conexión WSS | ✅ | `docs/agent-windows.md`; `sgl-win` conectado a `SGL-Lab` |
+| CA-02 | Registro de MAC, hostname e IP | ✅ | Bridge `ListDevices --details` (`net.netif2.mac`) + sync |
+| CA-03 | Conexión saliente sin puertos entrantes | ✅ | MeshAgent inicia WSS hacia `/mesh/` |
+| CA-04 | Listado de PCs por laboratorio | ✅ | `GET /api/equipment?laboratorio_id=` + filtro UI |
+| CA-05 | Estado, IP y usuario activo desde MeshCentral | ✅ | `meshcentral.service.js` + bridge |
+| CA-06 | Datos actualizados en el panel | ✅ | Sync bajo demanda + auto-refresco cada 30 s |
+| CA-07 | Backend consume API de MeshCentral | ✅ | Bridge `172.18.0.1:4444` |
+| CA-08 | Actualización periódica o bajo demanda | ✅ | `MESH_SYNC_MINUTES` + `GET /api/equipment` |
+| CA-09 | Error controlado con estado Desconocido | ✅ | `mesh_error:true`, `estado=DESCONOCIDO`, log y auditoría |
+
+**Resumen HU-COM-04:** 9 CA cumplidos · 0 pendientes.
+
+**Registro automático:** el bridge obtiene MAC/hostname/IP de MeshCentral y el
+backend hace upsert en `equipo`; si la PC no existe, infiere el laboratorio por
+`laboratorio.subred` (RN-001). Si no hay MAC o laboratorio, no crea el registro
+y lo reporta en el resumen.
+
+**Errores:** si MeshCentral no responde, la API devuelve las filas con
+`mesh_error: true` y `estado: "DESCONOCIDO"`; el detalle técnico queda solo en
+el log.
+
+El detalle está en `specs/hu-04.md`.
+
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -173,16 +201,16 @@ El detalle está en `specs/hu-03.md` y la instalación en `docs/meshcentral.md`.
 
 | Regla | Estado | Evidencia verificada | Falta |
 |---|---|---|---|
-| RN-001 | Cubierta (BD + API/UI) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio y la UI lo exige | — |
+| RN-001 | Cubierta (BD + API/UI + sync) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio; el sync lo infiere por subred y no crea PCs huérfanas | — |
 | RN-002 | Pendiente | — | Verificar vínculo app-lab antes de desplegar |
 | RN-003 | Pendiente | — | Generar despliegue para todas las PCs activas |
 | RN-004 | Pendiente | — | Cálculo de permisos por grupo + laboratorio |
 | RN-005 | Pendiente | — | Integración MeshAgent como servicio |
-| RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03) | Reintento individual y masivo de despliegues |
+| RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04, sync y auto-refresco) | Reintento individual y masivo de despliegues |
 | RN-007 | Cubierta (BD) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo` | Validación en API |
 | RN-008 | Cubierta (BD) | `permiso_app_grupo.habilitado DEFAULT FALSE` | Forzarlo en el servicio |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos (HU-COM-03) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
 | RN-011 | Cubierta (BD + bootstrap) | `grupo.codigo UNIQUE`; `GRP-1A` creado en Samba AD y BD | Validación en API de grupos |
 | RN-012 | Cubierta (BD + bootstrap) | `membresia_grupo` N:M; estudiante demo en `GRP-1A` | Sincronización automática desde la API |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
@@ -190,11 +218,11 @@ El detalle está en `specs/hu-03.md` y la instalación en `docs/meshcentral.md`.
 | RN-015 | Parcial | El bootstrap inserta en `membresia_grupo` solo `rol = ESTUDIANTE`; el docente va a `asignacion_docente` | Trigger/API que rechace otros roles |
 | RN-016 | Parcial | Tabla `lista_blanca_url` por grupo | Unión de listas + proxy/firewall |
 | RN-017 | Parcial | Docente limitado a sus grupos en `/users`, `/dashboard/summary` y `/monitoring/overview` | Validación antes de abrir KVM/MeshCentral |
-| RN-018 | Parcial (infra) | Samba AD y Docker operativos | MeshCentral |
+| RN-018 | Cubierta (infra) | Samba AD, Docker, MeshCentral y agente Windows operativos; gestión central de inventario y estado | — |
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
 | RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
-**Resumen:** 6 cubiertas · 8 parciales · 6 pendientes.
+**Resumen:** 7 cubiertas · 7 parciales · 6 pendientes.
 
 ## Observaciones
 

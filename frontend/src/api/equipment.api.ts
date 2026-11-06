@@ -13,8 +13,10 @@ export interface Equipment {
   mesh_agent_id: string | null
   ultimo_reporte: string | null
   usuario_actual: string | null
+  osdesc?: string | null
   mesh_source?: 'MESHCENTRAL' | 'LOCAL'
   mesh_encontrado?: boolean
+  mesh_error?: boolean
 }
 
 export interface EquipmentPayload {
@@ -25,9 +27,22 @@ export interface EquipmentPayload {
   mesh_agent_id?: string
 }
 
+export interface EquipmentSyncResult {
+  creados: number
+  actualizados: number
+  total: number
+  sin_laboratorio: number
+  sin_mac: number
+  sin_hostname?: number
+  errores: number
+  detalle: Array<Record<string, unknown>>
+}
+
 export const equipmentApi = {
-  async list(): Promise<Equipment[]> {
-    const { data } = await http.get('/equipment')
+  async list(laboratorioId?: string): Promise<Equipment[]> {
+    const { data } = await http.get('/equipment', {
+      params: laboratorioId ? { laboratorio_id: laboratorioId } : undefined,
+    })
     return data.data
   },
 
@@ -51,8 +66,10 @@ export const equipmentApi = {
     return data.data
   },
 
-  async sync(): Promise<{ actualizados: number; total: number }> {
-    const { data } = await http.post('/equipment/sync')
+  async sync(laboratorioId?: string): Promise<EquipmentSyncResult> {
+    const { data } = await http.post('/equipment/sync', {
+      laboratorio_id: laboratorioId || undefined,
+    })
     return data.data
   },
 }
