@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth.store'
+import { validateLogin } from '../../utils/authLogic'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -24,9 +25,11 @@ const reasonMessage = computed(() => {
 })
 
 function validate() {
-  uidError.value = uid.value.trim() ? '' : 'El usuario es obligatorio.'
-  passwordError.value = password.value ? '' : 'La contraseña es obligatoria.'
-  return !uidError.value && !passwordError.value
+  // PU-01/PU-02: la validación es lógica pura y testeable.
+  const validation = validateLogin(uid.value, password.value)
+  uidError.value = validation.uidError
+  passwordError.value = validation.passwordError
+  return validation.valid
 }
 
 function clearMessages() {

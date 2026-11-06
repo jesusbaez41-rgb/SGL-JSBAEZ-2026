@@ -82,6 +82,14 @@ async function login({ uid, password }, req) {
     ldapUser = await ldap.authenticate(loginUid, password);
   } catch (err) {
     if (err.code === 'LDAP_SERVICE_UNAVAILABLE') {
+      await recordAuthEvent(req, {
+        usuarioId: user ? user.id : null,
+        uid: loginUid,
+        rol: user ? user.rol : null,
+        accion: 'AUTH_NO_DISPONIBLE',
+        resultado: 'FALLO',
+        detalle: { motivo: 'LDAP_SERVICE_UNAVAILABLE' },
+      });
       throw authError(
         503,
         'Servicio de autenticación no disponible. Intente más tarde.',
@@ -99,7 +107,7 @@ async function login({ uid, password }, req) {
       resultado: 'FALLO',
       detalle: { motivo: err.code || 'CREDENCIALES_INVALIDAS' },
     });
-    throw authError(401, 'Credenciales inválidas', 'CREDENCIALES_INVALIDAS');
+    throw authError(401, 'Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS');
   }
 
   // CA-14: usuario sin registro/rol en la plataforma.

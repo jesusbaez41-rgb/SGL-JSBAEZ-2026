@@ -3,6 +3,9 @@ const { sequelize, Laboratorio } = require('../../models');
 const { recordAuditEvent } = require('../audit/audit.service');
 const { isValidSubred } = require('./labs.validators');
 
+const DEFAULT_SUBRED_MESSAGE =
+  'La subred debe ser una red IPv4 en formato CIDR, por ejemplo 192.168.100.0/24.';
+
 function httpError(status, message, code) {
   const err = new Error(message);
   err.status = status;
@@ -36,7 +39,7 @@ function translateDbError(err) {
 }
 
 async function list() {
-  return sequelize.query(
+  const rows = await sequelize.query(
     `
     SELECT l.id,
            l.nombre,
@@ -51,6 +54,11 @@ async function list() {
     `,
     { type: QueryTypes.SELECT },
   );
+
+  // CA-03: se garantiza el orden por nombre también a nivel de servicio.
+  return rows
+    .slice()
+    .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
 }
 
 async function get(id) {
@@ -62,6 +70,11 @@ async function get(id) {
 async function create(req, payload) {
   const nombre = String(payload.nombre || '').trim();
   const ubicacion = String(payload.ubicacion || '').trim();
+
+  // CA-02: la subred se valida antes de normalizar y persistir.
+  if (!isValidSubred(payload.subred)) {
+    throw httpError(400, DEFAULT_SUBRED_MESSAGE, 'SUBRED_INVALIDA');
+  }
   const subred = normalizeSubred(payload.subred);
 
   const existing = await Laboratorio.findOne({ where: { nombre } });

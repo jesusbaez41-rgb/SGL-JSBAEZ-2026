@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth.store'
+import { resolveRouteAccess } from '../utils/authLogic'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -20,18 +21,21 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'academico',
+        alias: '/panel/academico',
         name: 'academico',
         component: () => import('../views/panels/AcademicoView.vue'),
         meta: { permission: 'panel:academico', title: 'Panel académico' },
       },
       {
         path: 'tecnico',
+        alias: '/panel/tecnico',
         name: 'tecnico',
         component: () => import('../views/panels/TecnicoView.vue'),
         meta: { permission: 'panel:tecnico', title: 'Panel técnico' },
       },
       {
         path: 'docencia',
+        alias: '/panel/docencia',
         name: 'docencia',
         component: () => import('../views/panels/DocenciaView.vue'),
         meta: { permission: 'panel:docencia', title: 'Panel de docencia' },
@@ -98,6 +102,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: '403',
+        alias: '/acceso-denegado',
         name: 'access-denied',
         component: () => import('../views/errors/AccessDeniedView.vue'),
         meta: { title: 'Acceso denegado' },
@@ -129,10 +134,12 @@ router.beforeEach(async (to) => {
   }
 
   if (!auth.isAuthenticated) {
-    return {
-      name: 'login',
-      query: to.fullPath && to.fullPath !== '/' ? { redirect: to.fullPath } : undefined,
-    }
+    return resolveRouteAccess({
+      authenticated: false,
+      permissions: auth.permissions,
+      role: auth.user?.rol,
+      fullPath: to.fullPath,
+    })
   }
 
   if (!auth.ready) {
@@ -140,15 +147,15 @@ router.beforeEach(async (to) => {
     if (!ok) return { name: 'login' }
   }
 
-  if (to.name === 'home') {
-    return { path: auth.homeRoute }
-  }
-
-  if (to.meta.permission && !auth.can(String(to.meta.permission))) {
-    return { name: 'access-denied' }
-  }
-
-  return true
+  // PU-10/PU-14: decisión pura y testeable del guard.
+  return resolveRouteAccess({
+    authenticated: true,
+    permissions: auth.permissions,
+    role: auth.user?.rol,
+    targetName: to.name ? String(to.name) : undefined,
+    requiredPermission: to.meta.permission ? String(to.meta.permission) : undefined,
+    fullPath: to.fullPath,
+  })
 })
 
 export default router

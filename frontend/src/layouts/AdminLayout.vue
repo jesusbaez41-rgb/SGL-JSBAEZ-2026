@@ -3,67 +3,15 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.store'
 import { useIdleTimeout } from '../composables/useIdleTimeout'
-
-interface MenuItem {
-  label: string
-  to: string
-  permission: string
-  external?: boolean
-}
-
-interface MenuSection {
-  title: string
-  items: MenuItem[]
-}
+import { buildMenu } from '../utils/authLogic'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const mobileOpen = ref(false)
 
-const sections: MenuSection[] = [
-  {
-    title: 'Panel',
-    items: [
-      { label: 'Panel académico', to: '/academico', permission: 'panel:academico' },
-      { label: 'Panel técnico', to: '/tecnico', permission: 'panel:tecnico' },
-      { label: 'Panel de docencia', to: '/docencia', permission: 'panel:docencia' },
-    ],
-  },
-  {
-    title: 'Gestión académica',
-    items: [
-      { label: 'Usuarios', to: '/usuarios', permission: 'users:read' },
-      { label: 'Grupos', to: '/grupos', permission: 'groups:read' },
-      { label: 'Listas blancas', to: '/listas-blancas', permission: 'whitelists:read' },
-      { label: 'Auditoría', to: '/auditoria', permission: 'audit:read' },
-    ],
-  },
-  {
-    title: 'Gestión técnica',
-    items: [
-      { label: 'Laboratorios', to: '/laboratorios', permission: 'labs:read' },
-      { label: 'Equipos', to: '/equipos', permission: 'equipment:read' },
-      { label: 'MeshCentral', to: '/mesh/', permission: 'equipment:manage', external: true },
-      { label: 'Aplicaciones', to: '/aplicaciones', permission: 'apps:read' },
-      { label: 'Despliegues', to: '/despliegues', permission: 'deployments:read' },
-      { label: 'Políticas', to: '/politicas', permission: 'policies:read' },
-    ],
-  },
-  {
-    title: 'Docencia',
-    items: [{ label: 'Monitoreo', to: '/monitoreo', permission: 'monitoring:read' }],
-  },
-]
-
-const visibleSections = computed(() =>
-  sections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => auth.can(item.permission)),
-    }))
-    .filter((section) => section.items.length > 0),
-)
+// PU-11: el menú se construye únicamente con los permisos efectivos.
+const visibleSections = computed(() => buildMenu(auth.permissions))
 
 const idleMinutes = auth.session?.idleMinutes || 30
 const { remaining, showWarning, reset } = useIdleTimeout(handleIdleExpire, idleMinutes)

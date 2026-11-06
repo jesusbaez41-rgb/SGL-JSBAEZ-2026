@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, type SglUser, type SessionInfo } from '../api/auth.api'
+import { homeForRole } from '../utils/authLogic'
+
+export { ROLE_HOME } from '../utils/authLogic'
 
 const TOKEN_KEY = 'sgl_token'
 const USER_KEY = 'sgl_user'
@@ -12,12 +15,6 @@ export const ROLE_LABELS: Record<string, string> = {
   ADMIN_TECNICO: 'Administrador Técnico',
   DOCENTE: 'Docente',
   ESTUDIANTE: 'Estudiante',
-}
-
-export const ROLE_HOME: Record<string, string> = {
-  ADMIN_ACADEMICO: '/academico',
-  ADMIN_TECNICO: '/tecnico',
-  DOCENTE: '/docencia',
 }
 
 function readJson<T>(key: string): T | null {
@@ -48,9 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => Boolean(token.value && user.value))
   const roleLabel = computed(() => (user.value ? ROLE_LABELS[user.value.rol] || user.value.rol : ''))
-  const homeRoute = computed(() =>
-    user.value ? ROLE_HOME[user.value.rol] || '/login' : '/login',
-  )
+  const homeRoute = computed(() => (user.value ? homeForRole(user.value.rol) : '/login'))
   const can = (permission: string) => permissions.value.includes(permission)
 
   function persist() {
