@@ -40,6 +40,11 @@ const env = {
   ldapSearchBase: process.env.LDAP_SEARCH_BASE || 'DC=clockwork,DC=local',
   // HU-COM-02: contenedor donde se crean las cuentas nuevas
   ldapUsersDn: process.env.LDAP_USERS_DN || 'CN=Users,DC=clockwork,DC=local',
+  // HU-COM-05: contenedor donde se crean los grupos
+  ldapGroupsDn:
+    process.env.LDAP_GROUPS_DN ||
+    process.env.LDAP_USERS_DN ||
+    'CN=Users,DC=clockwork,DC=local',
   ldapCaCert: process.env.LDAP_CA_CERT || '',
   ldapTlsServername: process.env.LDAP_TLS_SERVERNAME || 'dc.clockwork.local',
   ldapTlsRejectUnauthorized: String(process.env.LDAP_TLS_REJECT_UNAUTHORIZED || 'true') !== 'false',

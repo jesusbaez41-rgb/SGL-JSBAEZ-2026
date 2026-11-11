@@ -19,6 +19,7 @@ router.use('/auth', require('../modules/auth/auth.routes'));
 
 // CA-13: el resto de endpoints exige JWT válido y sesión activa.
 router.use('/users', authMiddleware, require('../modules/users/users.routes'));
+router.use('/groups', authMiddleware, require('../modules/groups/groups.routes'));
 router.use('/dashboard', authMiddleware, require('../modules/dashboard/dashboard.routes'));
 router.use('/audit', authMiddleware, require('../modules/audit/audit.routes'));
 router.use('/monitoring', authMiddleware, require('../modules/monitoring/monitoring.routes'));

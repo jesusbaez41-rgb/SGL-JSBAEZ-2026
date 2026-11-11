@@ -24,6 +24,9 @@ const ROLE_PERMISSIONS = Object.freeze({
     // HU-COM-02: el Admin Técnico también administra cuentas.
     'users:read',
     'users:manage',
+    // HU-COM-05: el Admin Técnico también administra grupos.
+    'groups:read',
+    'groups:manage',
     'labs:read',
     'labs:manage',
     'equipment:read',

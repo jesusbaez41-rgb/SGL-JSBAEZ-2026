@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
 **Última revisión:** 2026-11-05  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), specs.
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), administración de grupos y membresías (HU-COM-05), specs.
 
 ## Resultado global
 
@@ -20,6 +20,7 @@
 | Registro de sesión de PC | **Parcial** (`sesion_activa` existe; 0 filas, sin agente) |
 | Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 verificado con `sgl-win`) |
 | Registro y monitoreo de PCs con MeshCentral (HU-COM-04) | **Implementado** (MAC/hostname/IP, sync y estado en vivo) |
+| Grupos y membresías con Samba AD (HU-COM-05) | **Implementado** (CRUD, estudiantes, docentes y auditoría) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
@@ -193,6 +194,35 @@ el log.
 
 El detalle está en `specs/hu-04.md`.
 
+## HU-COM-05 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Código único en plataforma y Samba AD | ✅ | `groups.service.js`, `ldap.service.js`, `uq_grupo_codigo` |
+| CA-02 | Sincronización de altas/modificaciones con Samba AD | ✅ | `groups.service.create/update` + `ldap.createGroup/updateGroup` |
+| CA-03 | No se eliminan cuentas de estudiantes al borrar un grupo | ✅ | `groups.service.remove` + cascada solo en relaciones |
+| CA-04 | Operaciones LDAP sobre grupos | ✅ | `ldap.service.js` (create/update/delete/members) |
+| CA-05 | Persistencia de `samba_sid`/`samba_dn` | ✅ | Tabla `grupo` y servicio de grupos |
+| CA-06 | Eliminación segura de relaciones | ✅ | `membresia_grupo`/`asignacion_docente` con `ON DELETE CASCADE` |
+| CA-07 | Solo estudiantes como miembros | ✅ | Validación `rol = ESTUDIANTE` |
+| CA-08 | Múltiple membresía | ✅ | `uq_membresia_usuario_grupo` + alta por grupo |
+| CA-09 | Asignación de docentes para monitoreo | ✅ | `asignacion_docente` + `addTeacher` |
+| CA-10 | Auditoría de acciones críticas | ✅ | `recordAuditEvent` en altas, cambios y membresías |
+
+**Resumen HU-COM-05:** 10 CA cumplidos · 0 pendientes.
+
+**Decisiones de diseño:**
+
+- El código del grupo se normaliza a mayúsculas y es inmutable después de la
+  creación para no romper el DN ni las membresías en Samba AD.
+- Los estudiantes se agregan como miembros del grupo en Samba AD.
+- Los docentes **no** se agregan como miembros del grupo en Samba AD; se
+  asignan en `asignacion_docente` para habilitar el monitoreo (RN-015).
+- El Docente solo puede listar/consultar los grupos que tiene asignados
+  (RN-017).
+
+El detalle está en `specs/hu-05.md`.
+
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -210,19 +240,19 @@ El detalle está en `specs/hu-04.md`.
 | RN-007 | Cubierta (BD) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo` | Validación en API |
 | RN-008 | Cubierta (BD) | `permiso_app_grupo.habilitado DEFAULT FALSE` | Forzarlo en el servicio |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
-| RN-011 | Cubierta (BD + bootstrap) | `grupo.codigo UNIQUE`; `GRP-1A` creado en Samba AD y BD | Validación en API de grupos |
-| RN-012 | Cubierta (BD + bootstrap) | `membresia_grupo` N:M; estudiante demo en `GRP-1A` | Sincronización automática desde la API |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
+| RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
+| RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
-| RN-014 | Cubierta (BD) | FK `ON DELETE CASCADE` en membresías/asignaciones | Borrado en Samba AD |
-| RN-015 | Parcial | El bootstrap inserta en `membresia_grupo` solo `rol = ESTUDIANTE`; el docente va a `asignacion_docente` | Trigger/API que rechace otros roles |
+| RN-014 | Cubierta (BD + API) | FK `ON DELETE CASCADE` en membresías/asignaciones; `groups.service.remove` elimina el grupo en Samba AD y las relaciones, sin borrar usuarios | — |
+| RN-015 | Cubierta (API + UI) | `groups.service.addStudent` exige `rol = ESTUDIANTE`; `addTeacher` exige `rol = DOCENTE` y usa `asignacion_docente`; la UI filtra por rol | Trigger de BD como defensa en profundidad |
 | RN-016 | Parcial | Tabla `lista_blanca_url` por grupo | Unión de listas + proxy/firewall |
-| RN-017 | Parcial | Docente limitado a sus grupos en `/users`, `/dashboard/summary` y `/monitoring/overview` | Validación antes de abrir KVM/MeshCentral |
+| RN-017 | Parcial | Docente limitado a sus grupos en `/users`, `/dashboard/summary`, `/monitoring/overview` y `/groups` (lista/detalle); asignación docente en `asignacion_docente` (HU-COM-05) | Validación antes de abrir KVM/MeshCentral |
 | RN-018 | Cubierta (infra) | Samba AD, Docker, MeshCentral y agente Windows operativos; gestión central de inventario y estado | — |
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
 | RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
-**Resumen:** 7 cubiertas · 7 parciales · 6 pendientes.
+**Resumen:** 8 cubiertas · 6 parciales · 6 pendientes.
 
 ## Observaciones
 

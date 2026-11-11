@@ -76,12 +76,17 @@ function escapeDnValue(value) {
  * Convierte el objectSid binario de AD a notación S-1-5-...
  */
 function bufferToSid(value) {
-  if (!Buffer.isBuffer(value) || value.length < 8) return null;
-  const revision = value[0];
-  const count = value[1];
-  let sid = `S-${revision}-${value.readUIntBE(2, 6)}`;
+  // ldapts puede devolver objectSid como Buffer o como string binario.
+  let buffer = value;
+  if (typeof value === 'string') buffer = Buffer.from(value, 'latin1');
+  else if (Array.isArray(value)) buffer = Buffer.from(value);
+
+  if (!Buffer.isBuffer(buffer) || buffer.length < 8) return null;
+  const revision = buffer[0];
+  const count = buffer[1];
+  let sid = `S-${revision}-${buffer.readUIntBE(2, 6)}`;
   for (let i = 0; i < count; i += 1) {
-    sid += `-${value.readUInt32LE(8 + i * 4)}`;
+    sid += `-${buffer.readUInt32LE(8 + i * 4)}`;
   }
   return sid;
 }
@@ -176,6 +181,7 @@ async function findUserByUid(uid) {
       scope: 'sub',
       filter: `(&(objectClass=user)(sAMAccountName=${escapeFilter(uid)}))`,
       attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
       sizeLimit: 2,
     });
     return searchEntries && searchEntries.length > 0 ? mapEntry(searchEntries[0]) : null;
@@ -188,6 +194,7 @@ async function findUserByEmail(email) {
       scope: 'sub',
       filter: `(&(objectClass=user)(mail=${escapeFilter(email)}))`,
       attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
       sizeLimit: 2,
     });
     return searchEntries && searchEntries.length > 0 ? mapEntry(searchEntries[0]) : null;
@@ -201,6 +208,7 @@ async function findUserByDn(dn) {
         scope: 'base',
         filter: '(objectClass=user)',
         attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
       });
       return searchEntries && searchEntries.length > 0 ? mapEntry(searchEntries[0]) : null;
     } catch (err) {
@@ -275,6 +283,7 @@ async function createUser({ uid, nombre, email, password }) {
       scope: 'base',
       filter: '(objectClass=user)',
       attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
     });
 
     return mapEntry(searchEntries[0]);
@@ -313,6 +322,7 @@ async function updateUser(dn, { nombre, email, password, enabled } = {}) {
         scope: 'base',
         filter: '(objectClass=user)',
         attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
       });
       return mapEntry(searchEntries[0]);
     } catch (err) {
@@ -354,6 +364,7 @@ async function authenticate(uid, password) {
       scope: 'sub',
       filter: `(&(objectClass=user)(sAMAccountName=${escapeFilter(uid)}))`,
       attributes: SEARCH_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
       sizeLimit: 2,
     });
 
@@ -387,6 +398,162 @@ async function authenticate(uid, password) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// HU-COM-05: operaciones sobre grupos de Samba AD
+// ---------------------------------------------------------------------------
+
+const GROUP_ATTRIBUTES = [
+  'dn',
+  'sAMAccountName',
+  'description',
+  'objectSid',
+  'member',
+  'groupType',
+];
+
+function toArray(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value.map(String) : [String(value)];
+}
+
+function mapGroupEntry(entry) {
+  return {
+    dn: String(entry.dn),
+    codigo: String(entry.sAMAccountName || ''),
+    descripcion: entry.description ? String(entry.description) : null,
+    sid: bufferToSid(entry.objectSid),
+    members: toArray(entry.member),
+    groupType: entry.groupType !== undefined ? String(entry.groupType) : null,
+  };
+}
+
+async function findGroupByCode(codigo) {
+  return withServiceClient(async (client) => {
+    const { searchEntries } = await client.search(env.ldapSearchBase, {
+      scope: 'sub',
+      filter: `(&(objectClass=group)(sAMAccountName=${escapeFilter(codigo)}))`,
+      attributes: GROUP_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
+      sizeLimit: 2,
+    });
+    return searchEntries && searchEntries.length > 0 ? mapGroupEntry(searchEntries[0]) : null;
+  });
+}
+
+async function findGroupByDn(dn) {
+  return withServiceClient(async (client) => {
+    try {
+      const { searchEntries } = await client.search(dn, {
+        scope: 'base',
+        filter: '(objectClass=group)',
+        attributes: GROUP_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
+      });
+      return searchEntries && searchEntries.length > 0 ? mapGroupEntry(searchEntries[0]) : null;
+    } catch (err) {
+      if (Number(err.code) === 32) return null;
+      throw mapLdapFailure(err, 'No se pudo consultar el grupo en Samba AD.');
+    }
+  });
+}
+
+async function createGroup({ codigo, descripcion }) {
+  return withServiceClient(async (client) => {
+    const baseName = String(codigo).trim();
+    const dn = `CN=${escapeDnValue(baseName)},${env.ldapGroupsDn}`;
+    const attributes = {
+      objectClass: ['top', 'group'],
+      cn: baseName,
+      sAMAccountName: baseName,
+      // Grupo global de seguridad (AD groupType).
+      groupType: '-2147483646',
+    };
+    if (descripcion) attributes.description = String(descripcion);
+
+    try {
+      await client.add(dn, attributes);
+    } catch (err) {
+      throw mapLdapFailure(err, 'No se pudo crear el grupo en Samba AD.');
+    }
+
+    const { searchEntries } = await client.search(dn, {
+      scope: 'base',
+      filter: '(objectClass=group)',
+      attributes: GROUP_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
+    });
+    return mapGroupEntry(searchEntries[0]);
+  });
+}
+
+async function updateGroup(dn, { descripcion } = {}) {
+  return withServiceClient(async (client) => {
+    try {
+      if (descripcion !== undefined) {
+        await client.modify(dn, replaceAttr('description', [String(descripcion || '')]));
+      }
+
+      const { searchEntries } = await client.search(dn, {
+        scope: 'base',
+        filter: '(objectClass=group)',
+        attributes: GROUP_ATTRIBUTES,
+      explicitBufferAttributes: ['objectSid'],
+      });
+      return mapGroupEntry(searchEntries[0]);
+    } catch (err) {
+      throw mapLdapFailure(err, 'No se pudo actualizar el grupo en Samba AD.');
+    }
+  });
+}
+
+async function deleteGroup(dn) {
+  return withServiceClient(async (client) => {
+    try {
+      await client.del(dn);
+    } catch (err) {
+      if (Number(err.code) === 32) return false;
+      throw mapLdapFailure(err, 'No se pudo eliminar el grupo en Samba AD.');
+    }
+    return true;
+  });
+}
+
+async function addGroupMember(groupDn, userDn) {
+  return withServiceClient(async (client) => {
+    try {
+      await client.modify(groupDn, [
+        new Change({
+          operation: 'add',
+          modification: new Attribute({ type: 'member', values: [userDn] }),
+        }),
+      ]);
+    } catch (err) {
+      // 20 = attribute or value already exists; la operación es idempotente.
+      if (Number(err.code) === 20) return true;
+      throw mapLdapFailure(err, 'No se pudo agregar el estudiante al grupo.');
+    }
+    return true;
+  });
+}
+
+async function removeGroupMember(groupDn, userDn) {
+  return withServiceClient(async (client) => {
+    try {
+      await client.modify(groupDn, [
+        new Change({
+          operation: 'delete',
+          modification: new Attribute({ type: 'member', values: [userDn] }),
+        }),
+      ]);
+    } catch (err) {
+      // 16 = no such attribute/value; 32 = no such object.
+      if (Number(err.code) === 16 || Number(err.code) === 32) return true;
+      throw mapLdapFailure(err, 'No se pudo remover el estudiante del grupo.');
+    }
+    return true;
+  });
+}
+
 module.exports = {
   authenticate,
   findUserByUid,
@@ -396,5 +563,12 @@ module.exports = {
   updateUser,
   setUserEnabled,
   deleteUser,
+  findGroupByCode,
+  findGroupByDn,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  addGroupMember,
+  removeGroupMember,
   mapLdapFailure,
 };

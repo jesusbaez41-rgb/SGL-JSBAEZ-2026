@@ -14,6 +14,7 @@ Es **normativa vinculante**: cualquier cambio en el sistema debe respetarla.
 | `hu-01.md` | HU-COM-01: autenticación web + PC cliente, Kerberos, GPO y sesión centralizada. |
 | `hu-03.md` | HU-COM-03: laboratorios, equipos y estado desde MeshCentral. |
 | `hu-04.md` | HU-COM-04: registro y monitoreo de PCs con agente MeshCentral. |
+| `hu-05.md` | HU-COM-05: administración de grupos y membresías con Samba AD. |
 | `diagrama-clases.md` | Diagrama de clases UML del dominio, servicios backend y frontend (PlantUML/Mermaid). |
 
 ## Flujo obligatorio antes de implementar

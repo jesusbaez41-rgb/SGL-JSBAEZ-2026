@@ -49,7 +49,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'grupos',
         name: 'grupos',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/groups/GroupsView.vue'),
         meta: { permission: 'groups:read', title: 'Grupos' },
       },
       {

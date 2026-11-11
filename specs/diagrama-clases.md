@@ -19,13 +19,13 @@ mostrando:
 El diagrama se presenta en **PlantUML** y **Mermaid** para facilitar su inclusión en
 la memoria del proyecto y su regeneración automática.
 
-## 2. Vista 1 — Modelo de dominio
+## 2. Vista 1A — Identidad, acceso y equipos
 
 ### 2.1 Diagrama PlantUML
 
 ```plantuml
 @startuml
-title SGL — Diagrama de clases del modelo de dominio
+title SGL — Clases: identidad, acceso y equipos
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 hide empty methods
@@ -143,6 +143,239 @@ package "Laboratorios y equipos" {
   }
 }
 
+enum Rol {
+  ADMIN_ACADEMICO
+  ADMIN_TECNICO
+  DOCENTE
+  ESTUDIANTE
+}
+
+enum EstadoEquipo {
+  ENCENDIDO
+  APAGADO
+  DESCONOCIDO
+}
+
+enum AccionAuditoria {
+  CREAR
+  ACTUALIZAR
+  ELIMINAR
+  DESPLEGAR
+  CAMBIO_PERMISO
+  EJECUTAR
+}
+
+enum ResultadoEvento {
+  EXITO
+  FALLO
+}
+
+enum AccionEvento {
+  LOGIN
+  LOGOUT
+  LOGIN_FALLIDO
+  LOGIN_BLOQUEADO
+  ACCESO_DENEGADO
+  SESION_EXPIRADA
+  ROL_NO_HABILITADO
+  USUARIO_INACTIVO
+  AUTH_NO_DISPONIBLE
+}
+
+Usuario "1" -- "0..*" MembresiaGrupo : participa
+Grupo "1" -- "0..*" MembresiaGrupo : agrupa
+Usuario "1" -- "0..*" AsignacionDocente : docencia
+Grupo "1" -- "0..*" AsignacionDocente : asignado
+
+Laboratorio "1" -- "0..*" Equipo : contiene
+Usuario "1" -- "0..*" SesionActiva : inicia
+Equipo "1" -- "0..*" SesionActiva : registra
+
+Usuario "1" -- "0..*" SesionWeb
+Usuario "1" -- "0..*" EventoAutenticacion
+Usuario "1" -- "0..*" Auditoria
+Usuario "1" -- "0..*" ArchivoAcademico
+
+Usuario ..> Rol
+Equipo ..> EstadoEquipo
+Auditoria ..> AccionAuditoria
+EventoAutenticacion ..> AccionEvento
+EventoAutenticacion ..> ResultadoEvento
+
+@enduml
+```
+
+### 2.2 Diagrama Mermaid
+
+```mermaid
+classDiagram
+  class Usuario {
+    +UUID id
+    +String uid
+    +String email
+    +String nombre_completo
+    +Rol rol
+    +Boolean activo
+    +String samba_sid
+    +String samba_dn
+    +estaActivo() Boolean
+    +esRolWeb() Boolean
+  }
+
+  class Grupo {
+    +UUID id
+    +String codigo
+    +String descripcion
+    +String samba_sid
+    +String samba_dn
+  }
+
+  class MembresiaGrupo {
+    +UUID id
+    +Date fecha_asignacion
+    +Boolean activa
+  }
+
+  class AsignacionDocente {
+    +UUID id
+    +Date fecha_asignacion
+  }
+
+  class Laboratorio {
+    +UUID id
+    +String nombre
+    +String ubicacion
+    +String subred
+    +contieneIp(ip) Boolean
+  }
+
+  class Equipo {
+    +UUID id
+    +String mac_address
+    +String hostname
+    +String ip_address
+    +EstadoEquipo estado
+    +String mesh_agent_id
+    +Date ultimo_reporte
+    +estaEnLinea() Boolean
+  }
+
+  class SesionActiva {
+    +UUID id
+    +Date hora_inicio
+    +Date hora_fin
+    +Boolean activa
+  }
+
+  class SesionWeb {
+    +UUID id
+    +UUID jti
+    +Rol rol
+    +Date creada_en
+    +Date ultima_actividad
+    +Date expira_en
+    +Date revocada_en
+    +estaVigente(now) Boolean
+  }
+
+  class EventoAutenticacion {
+    +UUID id
+    +String uid_intentado
+    +AccionEvento accion
+    +ResultadoEvento resultado
+    +Date fecha_evento
+  }
+
+  class Auditoria {
+    +UUID id
+    +AccionAuditoria accion
+    +String entidad_afectada
+    +UUID entidad_id
+    +Date fecha_evento
+    +Boolean inmutable
+  }
+
+  class ArchivoAcademico {
+    +UUID id
+    +String nombre
+    +String tipo
+    +Long tamano
+    +String ruta_smb
+  }
+
+  class Rol {
+    <<enumeration>>
+    ADMIN_ACADEMICO
+    ADMIN_TECNICO
+    DOCENTE
+    ESTUDIANTE
+  }
+
+  class EstadoEquipo {
+    <<enumeration>>
+    ENCENDIDO
+    APAGADO
+    DESCONOCIDO
+  }
+
+  class AccionAuditoria {
+    <<enumeration>>
+    CREAR
+    ACTUALIZAR
+    ELIMINAR
+    DESPLEGAR
+    CAMBIO_PERMISO
+    EJECUTAR
+  }
+
+  class ResultadoEvento {
+    <<enumeration>>
+    EXITO
+    FALLO
+  }
+
+  class AccionEvento {
+    <<enumeration>>
+    LOGIN
+    LOGOUT
+    LOGIN_FALLIDO
+    LOGIN_BLOQUEADO
+    ACCESO_DENEGADO
+    SESION_EXPIRADA
+    ROL_NO_HABILITADO
+    USUARIO_INACTIVO
+    AUTH_NO_DISPONIBLE
+  }
+
+  Usuario "1" -- "0..*" MembresiaGrupo
+  Grupo "1" -- "0..*" MembresiaGrupo
+  Usuario "1" -- "0..*" AsignacionDocente
+  Grupo "1" -- "0..*" AsignacionDocente
+  Laboratorio "1" -- "0..*" Equipo
+  Usuario "1" -- "0..*" SesionActiva
+  Equipo "1" -- "0..*" SesionActiva
+  Usuario "1" -- "0..*" SesionWeb
+  Usuario "1" -- "0..*" EventoAutenticacion
+  Usuario "1" -- "0..*" Auditoria
+  Usuario "1" -- "0..*" ArchivoAcademico
+  Usuario ..> Rol
+  Equipo ..> EstadoEquipo
+  Auditoria ..> AccionAuditoria
+  EventoAutenticacion ..> AccionEvento
+  EventoAutenticacion ..> ResultadoEvento
+```
+
+## 2B. Vista 1B — Aplicaciones, despliegues y políticas
+
+### 2B.1 Diagrama PlantUML
+
+```plantuml
+@startuml
+title SGL — Clases: aplicaciones, despliegues y políticas
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty methods
+
 package "Aplicaciones y despliegues" {
 
   class Aplicacion {
@@ -209,26 +442,23 @@ package "Políticas y filtrado" {
   }
 }
 
-enum Rol {
-  ADMIN_ACADEMICO
-  ADMIN_TECNICO
-  DOCENTE
-  ESTUDIANTE
-}
+package "Referencias del dominio" {
 
-enum EstadoEquipo {
-  ENCENDIDO
-  APAGADO
-  DESCONOCIDO
-}
+  class Usuario <<referencia>> {
+    - id: UUID
+  }
 
-enum AccionAuditoria {
-  CREAR
-  ACTUALIZAR
-  ELIMINAR
-  DESPLEGAR
-  CAMBIO_PERMISO
-  EJECUTAR
+  class Grupo <<referencia>> {
+    - id: UUID
+  }
+
+  class Laboratorio <<referencia>> {
+    - id: UUID
+  }
+
+  class Equipo <<referencia>> {
+    - id: UUID
+  }
 }
 
 enum EstadoDespliegue {
@@ -243,43 +473,6 @@ enum TipoDespliegue {
   DESINSTALAR
 }
 
-enum ResultadoEvento {
-  EXITO
-  FALLO
-}
-
-enum AccionEvento {
-  LOGIN
-  LOGOUT
-  LOGIN_FALLIDO
-  LOGIN_BLOQUEADO
-  ACCESO_DENEGADO
-  SESION_EXPIRADA
-  ROL_NO_HABILITADO
-  USUARIO_INACTIVO
-  AUTH_NO_DISPONIBLE
-}
-
-Usuario "1" -- "0..*" MembresiaGrupo : participa
-Grupo "1" -- "0..*" MembresiaGrupo : agrupa
-Usuario "1" -- "0..*" AsignacionDocente : docencia
-Grupo "1" -- "0..*" AsignacionDocente : asignado
-
-Laboratorio "1" -- "0..*" Equipo : contiene
-Usuario "1" -- "0..*" SesionActiva : inicia
-Equipo "1" -- "0..*" SesionActiva : registra
-
-Usuario "1" -- "0..*" SesionWeb
-Usuario "1" -- "0..*" EventoAutenticacion
-Usuario "1" -- "0..*" Auditoria
-Usuario "1" -- "0..*" ArchivoAcademico
-
-Grupo "1" -- "0..*" ListaBlancaURL
-Grupo "1" -- "0..*" PoliticaEjecucion
-Laboratorio "1" -- "0..*" PoliticaEjecucion
-Grupo "1" -- "0..*" ConfigFiltrado
-Laboratorio "1" -- "0..*" ConfigFiltrado
-
 Aplicacion "1" -- "0..*" VinculoAppLab
 Laboratorio "1" -- "0..*" VinculoAppLab
 VinculoAppLab "1" -- "0..*" PermisoAppGrupo
@@ -289,133 +482,26 @@ Usuario "1" -- "0..*" Despliegue
 Despliegue "1" *-- "0..*" DespliegueEquipo
 Equipo "1" -- "0..*" DespliegueEquipo
 
-Usuario ..> Rol
-Equipo ..> EstadoEquipo
-Auditoria ..> AccionAuditoria
+Grupo "1" -- "0..*" ListaBlancaURL
+Grupo "1" -- "0..*" PoliticaEjecucion
+Laboratorio "1" -- "0..*" PoliticaEjecucion
+Grupo "1" -- "0..*" ConfigFiltrado
+Laboratorio "1" -- "0..*" ConfigFiltrado
+
 Despliegue ..> TipoDespliegue
 DespliegueEquipo ..> EstadoDespliegue
-EventoAutenticacion ..> AccionEvento
-EventoAutenticacion ..> ResultadoEvento
 
 @enduml
 ```
 
-### 2.2 Diagrama Mermaid
+### 2B.2 Diagrama Mermaid
 
 ```mermaid
 classDiagram
-  class Usuario {
-    +UUID id
-    +String uid
-    +String email
-    +String nombre_completo
-    +Rol rol
-    +Boolean activo
-    +String samba_sid
-    +String samba_dn
-    +Integer intentos_fallidos
-    +Date bloqueado_hasta
-    +Date ultimo_login
-    +estaActivo() Boolean
-    +esRolWeb() Boolean
-  }
-
-  class Grupo {
-    +UUID id
-    +String codigo
-    +String descripcion
-    +String samba_sid
-    +String samba_dn
-  }
-
-  class MembresiaGrupo {
-    +UUID id
-    +Date fecha_asignacion
-    +Boolean activa
-  }
-
-  class AsignacionDocente {
-    +UUID id
-    +Date fecha_asignacion
-  }
-
-  class Laboratorio {
-    +UUID id
-    +String nombre
-    +String ubicacion
-    +String subred
-    +contieneIp(ip) Boolean
-  }
-
-  class Equipo {
-    +UUID id
-    +String mac_address
-    +String hostname
-    +String ip_address
-    +EstadoEquipo estado
-    +String mesh_agent_id
-    +Date ultimo_reporte
-    +estaEnLinea() Boolean
-  }
-
-  class SesionActiva {
-    +UUID id
-    +Date hora_inicio
-    +Date hora_fin
-    +Boolean activa
-  }
-
-  class SesionWeb {
-    +UUID id
-    +UUID jti
-    +Rol rol
-    +String ip_origen
-    +String user_agent
-    +Date creada_en
-    +Date ultima_actividad
-    +Date expira_en
-    +Date revocada_en
-    +String motivo_revocacion
-    +estaVigente(now) Boolean
-  }
-
-  class EventoAutenticacion {
-    +UUID id
-    +String uid_intentado
-    +Rol rol
-    +AccionEvento accion
-    +ResultadoEvento resultado
-    +String ip_origen
-    +String user_agent
-    +JSON detalle
-    +Date fecha_evento
-  }
-
-  class Auditoria {
-    +UUID id
-    +AccionAuditoria accion
-    +String entidad_afectada
-    +UUID entidad_id
-    +JSON detalle
-    +String ip_origen
-    +Date fecha_evento
-    +Boolean inmutable
-  }
-
-  class ArchivoAcademico {
-    +UUID id
-    +String nombre
-    +String tipo
-    +Long tamano
-    +String ruta_smb
-    +Date created_at
-  }
-
   class Aplicacion {
     +UUID id
     +String nombre
     +String ruta_instalador
-    +String parametros_silenciosos
     +String version
     +String checksum
   }
@@ -460,7 +546,6 @@ classDiagram
     +String reglas_applocker
     +String gpo_xml
     +String version
-    +Date fecha_generacion
   }
 
   class ConfigFiltrado {
@@ -468,32 +553,26 @@ classDiagram
     +String config_squid
     +String config_squidguard
     +String version
-    +Date fecha_generacion
   }
 
-  class Rol {
-    <<enumeration>>
-    ADMIN_ACADEMICO
-    ADMIN_TECNICO
-    DOCENTE
-    ESTUDIANTE
+  class Usuario {
+    <<referencia>>
+    +UUID id
   }
 
-  class EstadoEquipo {
-    <<enumeration>>
-    ENCENDIDO
-    APAGADO
-    DESCONOCIDO
+  class Grupo {
+    <<referencia>>
+    +UUID id
   }
 
-  class AccionAuditoria {
-    <<enumeration>>
-    CREAR
-    ACTUALIZAR
-    ELIMINAR
-    DESPLEGAR
-    CAMBIO_PERMISO
-    EJECUTAR
+  class Laboratorio {
+    <<referencia>>
+    +UUID id
+  }
+
+  class Equipo {
+    <<referencia>>
+    +UUID id
   }
 
   class EstadoDespliegue {
@@ -510,45 +589,6 @@ classDiagram
     DESINSTALAR
   }
 
-  class ResultadoEvento {
-    <<enumeration>>
-    EXITO
-    FALLO
-  }
-
-  class AccionEvento {
-    <<enumeration>>
-    LOGIN
-    LOGOUT
-    LOGIN_FALLIDO
-    LOGIN_BLOQUEADO
-    ACCESO_DENEGADO
-    SESION_EXPIRADA
-    ROL_NO_HABILITADO
-    USUARIO_INACTIVO
-    AUTH_NO_DISPONIBLE
-  }
-
-  Usuario "1" -- "0..*" MembresiaGrupo : participa
-  Grupo "1" -- "0..*" MembresiaGrupo : agrupa
-  Usuario "1" -- "0..*" AsignacionDocente : docencia
-  Grupo "1" -- "0..*" AsignacionDocente : asignado
-
-  Laboratorio "1" -- "0..*" Equipo : contiene
-  Usuario "1" -- "0..*" SesionActiva : inicia
-  Equipo "1" -- "0..*" SesionActiva : registra
-
-  Usuario "1" -- "0..*" SesionWeb
-  Usuario "1" -- "0..*" EventoAutenticacion
-  Usuario "1" -- "0..*" Auditoria
-  Usuario "1" -- "0..*" ArchivoAcademico
-
-  Grupo "1" -- "0..*" ListaBlancaURL
-  Grupo "1" -- "0..*" PoliticaEjecucion
-  Laboratorio "1" -- "0..*" PoliticaEjecucion
-  Grupo "1" -- "0..*" ConfigFiltrado
-  Laboratorio "1" -- "0..*" ConfigFiltrado
-
   Aplicacion "1" -- "0..*" VinculoAppLab
   Laboratorio "1" -- "0..*" VinculoAppLab
   VinculoAppLab "1" -- "0..*" PermisoAppGrupo
@@ -557,15 +597,15 @@ classDiagram
   Usuario "1" -- "0..*" Despliegue
   Despliegue "1" *-- "0..*" DespliegueEquipo
   Equipo "1" -- "0..*" DespliegueEquipo
-
-  Usuario ..> Rol
-  Equipo ..> EstadoEquipo
-  Auditoria ..> AccionAuditoria
+  Grupo "1" -- "0..*" ListaBlancaURL
+  Grupo "1" -- "0..*" PoliticaEjecucion
+  Laboratorio "1" -- "0..*" PoliticaEjecucion
+  Grupo "1" -- "0..*" ConfigFiltrado
+  Laboratorio "1" -- "0..*" ConfigFiltrado
   Despliegue ..> TipoDespliegue
   DespliegueEquipo ..> EstadoDespliegue
-  EventoAutenticacion ..> AccionEvento
-  EventoAutenticacion ..> ResultadoEvento
 ```
+
 
 ## 3. Vista 2 — Servicios backend
 
