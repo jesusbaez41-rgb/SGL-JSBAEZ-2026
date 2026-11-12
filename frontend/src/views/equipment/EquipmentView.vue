@@ -11,6 +11,7 @@ import {
   hasMeshError,
   statusLabel,
 } from '../../utils/equipmentLogic'
+import ConsoleModal from './ConsoleModal.vue'
 import EquipmentFormModal from './EquipmentFormModal.vue'
 
 const auth = useAuthStore()
@@ -23,6 +24,8 @@ const error = ref('')
 const loadError = ref('')
 const success = ref('')
 const showModal = ref(false)
+const showConsole = ref(false)
+const consoleEquipment = ref<Equipment | null>(null)
 const editing = ref<Equipment | null>(null)
 const syncing = ref(false)
 const busyId = ref<string | null>(null)
@@ -65,6 +68,11 @@ async function load(silent = false) {
   } finally {
     if (!silent) loading.value = false
   }
+}
+
+function openConsole(item: Equipment) {
+  consoleEquipment.value = item
+  showConsole.value = true
 }
 
 function openCreate() {
@@ -278,6 +286,13 @@ onBeforeUnmount(() => {
                 <button
                   class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                   type="button"
+                  @click="openConsole(item)"
+                >
+                  Consola
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  type="button"
                   @click="openEdit(item)"
                 >
                   Editar
@@ -293,6 +308,12 @@ onBeforeUnmount(() => {
         </tbody>
       </table>
     </div>
+
+    <ConsoleModal
+      v-if="showConsole && consoleEquipment"
+      :equipo="consoleEquipment"
+      @close="showConsole = false"
+    />
 
     <EquipmentFormModal
       v-if="showModal"

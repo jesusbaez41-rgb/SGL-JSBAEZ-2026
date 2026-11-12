@@ -85,7 +85,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'despliegues',
         name: 'despliegues',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/deployments/DeploymentsView.vue'),
         meta: { permission: 'deployments:read', title: 'Despliegues' },
       },
       {

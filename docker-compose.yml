@@ -67,6 +67,9 @@ services:
     depends_on:
       backend:
         condition: service_started
+    volumes:
+      # HU-COM-08: los equipos descargan los instaladores por HTTP.
+      - ${APPS_INSTALLERS_DIR:-/opt/sgl-instaladores}:/usr/share/nginx/instaladores:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

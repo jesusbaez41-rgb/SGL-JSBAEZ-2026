@@ -22,6 +22,7 @@
 | Registro y monitoreo de PCs con MeshCentral (HU-COM-04) | **Implementado** (MAC/hostname/IP, sync y estado en vivo) |
 | Grupos y membresías con Samba AD (HU-COM-05) | **Implementado** (CRUD, estudiantes, docentes y auditoría) |
 | Catálogo de aplicaciones e instaladores (HU-COM-07) | **Implementado** (SHA-256, metadatos y vínculos por laboratorio) |
+| Despliegue remoto de aplicaciones (HU-COM-08) | **Implementado** (despliegue masivo vía MeshCentral, estado por equipo y reintentos) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
@@ -261,6 +262,39 @@ El detalle está en `specs/hu-05.md`.
 
 El detalle está en `specs/hu-07.md`.
 
+## HU-COM-08 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Despliegue masivo silencioso en menos de 2 s (RN-003, RNF-004) | ✓ | `deployments.service.create` despacha en paralelo sin esperar la respuesta (≈130 ms medidos) |
+| CA-02 | Equipos apagados quedan PENDIENTE y se reintentan (RNF-005, RNF-006) | ✓ | `despacharEquipo` + barrido `deployments.sync` + `POST /:id/retry` |
+| CA-03 | Monitoreo de estado por equipo (RF-017) | ✓ | `despliegue_equipo.estado` + `DeploymentDetailModal.vue` |
+| CA-04 | Desinstalación remota | ✓ | Tipo `DESINSTALAR` + `aplicacion.comando_desinstalacion` |
+| CA-05 | Validación del vínculo antes de desplegar | ✓ | `assertAppLinked` → `409 APP_NO_VINCULADA` |
+| CA-06 | Envío de comandos a MeshCentral | ✓ | `deployments.mesh.desplegar` → bridge `POST /desplegar` |
+| CA-07 | Actualización de estados según los reportes | ✓ | `despacharEquipo` + refresco automático de la UI |
+| CA-08 | Reintentos de equipos pendientes o fallidos | ✓ | `POST /api/deployments/:id/retry` y barrido `sweep` |
+| CA-09 | Recepción vía agente con privilegios de sistema (RN-005) | ✓ | `meshctrl RunCommand --powershell` (agente como servicio `LocalSystem`) |
+| CA-10 | Instalación silenciosa | ✓ | `msiexec /qn` o `Start-Process -WindowStyle Hidden` |
+| CA-11 | Reporte de estado desde la PC | ✓ | El agente devuelve `SGL_EXITCODE` y el bridge lo parsea |
+
+**Resumen HU-COM-08:** 11 CA cumplidos · 0 pendientes.
+
+**Decisiones de diseño:**
+
+- El despliegue siempre nace de un vínculo app-laboratorio (`despliegue.vinculo_id`),
+  así que RN-002 se cumple por esquema además de por la validación del servicio.
+- La orden se envía sin esperar la respuesta del equipo: el alta responde en
+  menos de 2 segundos (CA-01) y el resultado por equipo se refleja después.
+- MeshCentral encola las órdenes de los equipos apagados pero no las ejecuta;
+  por eso el backend las mantiene en PENDIENTE y las reintenta cuando el
+  agente vuelve a estar en línea.
+- La desinstalación usa `aplicacion.comando_desinstalacion`; para los `.msi`
+  sin comando propio se usa `msiexec /x`.
+- El bridge se despliega como servicio systemd (`sgl-mesh-bridge`) y expone
+  `POST /desplegar` además de `GET /devices`.
+
+El detalle está en `specs/hu-08.md`.
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -270,15 +304,15 @@ El detalle está en `specs/hu-07.md`.
 | Regla | Estado | Evidencia verificada | Falta |
 |---|---|---|---|
 | RN-001 | Cubierta (BD + API/UI + sync) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio; el sync lo infiere por subred y no crea PCs huérfanas | — |
-| RN-002 | Cubierta (API) | `apps.service.link` crea el vínculo app-laboratorio y `assertAppLinked` lo exige antes de desplegar (HU-COM-07) | Invocarlo desde el despliegue (HU-COM-08) |
-| RN-003 | Pendiente | — | Generar despliegue para todas las PCs activas |
+| RN-002 | Cubierta (API + despliegue) | `apps.service.link` crea el vínculo app-laboratorio y `assertAppLinked` lo exige antes de desplegar (HU-COM-07); el despliegue de HU-COM-08 lo invoca y responde `409 APP_NO_VINCULADA` | — |
+| RN-003 | Cubierta (API) | `deployments.service.create` genera un despliegue para todas las PCs del laboratorio y no permite seleccionar PCs individuales (HU-COM-08) | — |
 | RN-004 | Pendiente | — | Cálculo de permisos por grupo + laboratorio |
-| RN-005 | Pendiente | — | Integración MeshAgent como servicio |
-| RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04, sync y auto-refresco) | Reintento individual y masivo de despliegues |
+| RN-005 | Cubierta (infra + API) | El agente se instala como servicio Windows `LocalSystem` (`docs/agent-windows.md`); las órdenes viajan por `meshctrl RunCommand --powershell` (HU-COM-08) | — |
+| RN-006 | Cubierta (BD + API) | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04); reintento individual (`POST /:id/retry` con `equipo_id`) y masivo, más barrido automático de los equipos que se encienden (HU-COM-08) | — |
 | RN-007 | Cubierta (BD + API) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo`; `apps.service.link` rechaza otra versión activa y permite históricas inactivas | — |
 | RN-008 | Cubierta (BD + API) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo de HU-COM-07 no crea permisos, quedan deshabilitados por defecto | Servicio de permisos por grupo (RN-013) |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) | Auditar logon de PC en SGL (HU-COM-01), permisos, despliegues y listas blancas |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) + despliegues y reintentos (HU-COM-08) | Auditar logon de PC en SGL (HU-COM-01), permisos por grupo y listas blancas |
 | RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
 | RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
@@ -290,7 +324,7 @@ El detalle está en `specs/hu-07.md`.
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
 | RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
-**Resumen:** 9 cubiertas · 6 parciales · 5 pendientes.
+**Resumen:** 12 cubiertas · 5 parciales · 3 pendientes.
 
 ## Observaciones
 

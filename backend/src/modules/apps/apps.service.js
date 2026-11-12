@@ -39,6 +39,10 @@ function normalizeAppPayload(payload) {
       : null,
     version: normalizeText(payload.version),
     checksum: checksum.normalizeChecksum(payload.checksum),
+    // HU-COM-08: comando de desinstalacion remota (CA-04).
+    comando_desinstalacion: payload.comando_desinstalacion
+      ? String(payload.comando_desinstalacion).trim()
+      : null,
   };
 }
 
@@ -57,6 +61,7 @@ function toApp(app, counts = {}) {
     version: data.version,
     checksum: data.checksum,
     origen: data.origen || 'ruta',
+    comando_desinstalacion: data.comando_desinstalacion || null,
     created_at: data.created_at || null,
     vinculos_activos: counts.activos || 0,
     laboratorios: counts.laboratorios || [],
@@ -87,6 +92,7 @@ function toLink(link) {
 
 function translateDbError(err) {
   if (err.status) return err;
+
   if (err.name === 'SequelizeUniqueConstraintError') {
     return httpError(
       409,
@@ -94,6 +100,19 @@ function translateDbError(err) {
       'VERSION_CONFLICTO',
     );
   }
+
+  if (err.name === 'SequelizeForeignKeyConstraintError') {
+    return httpError(
+      409,
+      'La aplicación tiene despliegues asociados y no se puede eliminar.',
+      'APP_CON_DESPLIEGUES',
+    );
+  }
+
+  // Errores que no vienen de la base (por ejemplo ENOSPC: disco lleno)
+  // se propagan con su mensaje real para no ocultar la causa.
+  if (!String(err.name || '').startsWith('Sequelize')) return err;
+
   return httpError(500, 'No se pudo guardar la aplicación.', 'DB_ERROR');
 }
 
@@ -313,6 +332,11 @@ async function update(req, id, payload) {
   if (payload.parametros_silenciosos !== undefined) {
     changes.parametros_silenciosos = payload.parametros_silenciosos
       ? String(payload.parametros_silenciosos).trim()
+      : null;
+  }
+  if (payload.comando_desinstalacion !== undefined) {
+    changes.comando_desinstalacion = payload.comando_desinstalacion
+      ? String(payload.comando_desinstalacion).trim()
       : null;
   }
 

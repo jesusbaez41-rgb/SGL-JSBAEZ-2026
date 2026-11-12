@@ -8,6 +8,7 @@
  */
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/;
 const MAX_PARAMS = 2000;
+const MAX_COMANDO = 2000;
 
 function validateCreateApp(body) {
   const errors = [];
@@ -32,6 +33,11 @@ function validateCreateApp(body) {
 
   if (parametros.length > MAX_PARAMS) {
     errors.push(`Los parámetros silenciosos no pueden superar los ${MAX_PARAMS} caracteres.`);
+  }
+
+  const comando = String(body.comando_desinstalacion || '');
+  if (comando.length > MAX_COMANDO) {
+    errors.push(`El comando de desinstalación no puede superar los ${MAX_COMANDO} caracteres.`);
   }
 
   return errors;
@@ -60,6 +66,13 @@ function validateUpdateApp(body) {
     const version = String(body.version || '').trim();
     if (!version) errors.push('La versión no puede quedar vacía.');
     else if (!VERSION_PATTERN.test(version)) errors.push('La versión no tiene un formato válido.');
+  }
+
+  if (
+    body.comando_desinstalacion !== undefined &&
+    String(body.comando_desinstalacion || '').length > MAX_COMANDO
+  ) {
+    errors.push(`El comando de desinstalación no puede superar los ${MAX_COMANDO} caracteres.`);
   }
 
   if (body.checksum !== undefined && !String(body.checksum || '').trim()) {

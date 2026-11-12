@@ -2,6 +2,7 @@ const app = require('./app');
 const env = require('./config/env');
 const { sequelize } = require('./models');
 const meshSync = require('./modules/equipment/equipment.sync');
+const deploymentsSync = require('./modules/deployments/deployments.sync');
 
 async function start() {
   try {
@@ -15,11 +16,14 @@ async function start() {
     console.log(`[sgl] API escuchando en :${env.port}`);
     // HU-COM-04 / CA-08: mantener el inventario actualizado.
     meshSync.start();
+    // HU-COM-08 / CA-02: reintentar los equipos que se encienden.
+    deploymentsSync.start();
   });
 
   function shutdown(signal) {
     console.log(`[sgl] Cerrando por ${signal}…`);
     meshSync.stop();
+    deploymentsSync.stop();
     server.close(() => process.exit(0));
   }
 

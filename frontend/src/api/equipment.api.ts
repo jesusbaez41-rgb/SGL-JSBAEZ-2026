@@ -66,6 +66,17 @@ export const equipmentApi = {
     return data.data
   },
 
+  /** Ejecuta un comando en el equipo y devuelve la salida del agente. */
+  async consola(id: string, comando: string): Promise<{
+    equipo: { id: string; hostname: string }
+    ok: boolean
+    salida: string
+    error: string | null
+  }> {
+    const { data } = await http.post(`/equipment/${id}/console`, { comando })
+    return data.data
+  },
+
   async sync(laboratorioId?: string): Promise<EquipmentSyncResult> {
     const { data } = await http.post('/equipment/sync', {
       laboratorio_id: laboratorioId || undefined,

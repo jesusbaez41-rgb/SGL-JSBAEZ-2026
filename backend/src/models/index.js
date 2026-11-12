@@ -10,6 +10,8 @@ const EventoAutenticacion = require('./eventoAutenticacion.model');
 const Auditoria = require('./auditoria.model');
 const Aplicacion = require('./aplicacion.model');
 const VinculoAppLab = require('./vinculoAppLab.model');
+const Despliegue = require('./despliegue.model');
+const DespliegueEquipo = require('./despliegueEquipo.model');
 
 // HU-COM-03: un laboratorio tiene muchos equipos y cada equipo pertenece a uno.
 Laboratorio.hasMany(Equipo, { foreignKey: 'laboratorio_id', as: 'equipos' });
@@ -52,6 +54,15 @@ VinculoAppLab.belongsTo(Aplicacion, { foreignKey: 'app_id', as: 'aplicacion' });
 Laboratorio.hasMany(VinculoAppLab, { foreignKey: 'laboratorio_id', as: 'vinculosApp' });
 VinculoAppLab.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
 
+// HU-COM-08: despliegues masivos y estado por equipo.
+Despliegue.belongsTo(VinculoAppLab, { foreignKey: 'vinculo_id', as: 'vinculo' });
+VinculoAppLab.hasMany(Despliegue, { foreignKey: 'vinculo_id', as: 'despliegues' });
+Despliegue.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+Despliegue.hasMany(DespliegueEquipo, { foreignKey: 'despliegue_id', as: 'estados' });
+DespliegueEquipo.belongsTo(Despliegue, { foreignKey: 'despliegue_id', as: 'despliegue' });
+DespliegueEquipo.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
+Equipo.hasMany(DespliegueEquipo, { foreignKey: 'equipo_id', as: 'despliegues' });
+
 module.exports = {
   sequelize,
   Usuario,
@@ -65,4 +76,6 @@ module.exports = {
   Auditoria,
   Aplicacion,
   VinculoAppLab,
+  Despliegue,
+  DespliegueEquipo,
 };

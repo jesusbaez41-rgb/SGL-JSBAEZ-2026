@@ -59,6 +59,13 @@ const env = {
   // HU-COM-07: directorio base para rutas relativas de instaladores.
   appsInstallersDir: process.env.APPS_INSTALLERS_DIR || '/opt/sgl-instaladores',
 
+  // HU-COM-08: barrido de reintento de equipos encendidos (minutos, 0 desactiva).
+  deploymentsRetryMinutes: Number(process.env.DEPLOYMENTS_RETRY_MINUTES || 2),
+  // HU-COM-08: espera maxima de una orden remota MeshCentral.
+  deploymentTimeoutMs: Number(process.env.DEPLOYMENT_TIMEOUT_MS || 300000),
+  // HU-COM-08: espera maxima de la fase de envio del instalador.
+  deploymentUploadTimeoutMs: Number(process.env.DEPLOYMENT_UPLOAD_TIMEOUT_MS || 300000),
+
   corsOrigin: process.env.CORS_ORIGIN || '*',
 };
 

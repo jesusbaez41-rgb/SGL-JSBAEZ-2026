@@ -29,6 +29,7 @@ const form = reactive({
   ruta_instalador: props.app?.ruta_instalador || '',
   parametros_silenciosos: props.app?.parametros_silenciosos || '',
   checksum: props.app?.checksum || '',
+  comando_desinstalacion: props.app?.comando_desinstalacion || '',
 })
 
 const errors = reactive<Record<string, string>>({})
@@ -99,6 +100,7 @@ async function submit() {
       payload.append('nombre', form.nombre.trim())
       payload.append('version', form.version.trim())
       payload.append('parametros_silenciosos', form.parametros_silenciosos.trim())
+      payload.append('comando_desinstalacion', form.comando_desinstalacion.trim())
 
       const result = isEdit.value && props.app
         ? await appsApi.replaceInstaller(props.app.id, payload)
@@ -114,13 +116,25 @@ async function submit() {
       ruta_instalador: form.ruta_instalador.trim(),
       parametros_silenciosos: form.parametros_silenciosos.trim(),
       checksum: normalizeChecksum(form.checksum),
+      comando_desinstalacion: form.comando_desinstalacion.trim(),
     }
     const saved = isEdit.value && props.app
       ? await appsApi.update(props.app.id, payload)
       : await appsApi.create(payload)
     emit('saved', saved)
   } catch (e: any) {
-    serverError.value = e?.response?.data?.error || 'No se pudo guardar la aplicación.'
+    const status = e?.response?.status
+    if (status === 413) {
+      serverError.value =
+        'El archivo es demasiado grande para el servidor. Aumentá el límite o usá un instalador más chico.'
+    } else if (status === 409) {
+      serverError.value = e?.response?.data?.error || 'Ya existe una aplicación con ese nombre y versión.'
+    } else if (!e?.response) {
+      serverError.value =
+        'No se pudo contactar al servidor (¿se cortó la conexión durante la subida?).'
+    } else {
+      serverError.value = e?.response?.data?.error || 'No se pudo guardar la aplicación.'
+    }
   } finally {
     saving.value = false
   }
@@ -285,6 +299,43 @@ async function submit() {
         />
         <p v-if="errors.parametros_silenciosos" class="mt-1 text-xs text-red-600">
           {{ errors.parametros_silenciosos }}
+        </p>
+        <p
+          v-else-if="form.ruta_instalador.trim().toLowerCase().endsWith('.exe') && !form.parametros_silenciosos.trim()"
+          class="mt-1 text-xs text-amber-700"
+        >
+          Los instaladores .exe necesitan parámetros silenciosos (por ejemplo /S);
+          sin ellos el instalador se queda esperando y el despliegue falla.
+        </p>
+        <p
+          v-if="/user[-_. ]?setup|user-installer|-user-/i.test(form.ruta_instalador)"
+          class="mt-1 text-xs text-amber-700"
+        >
+          Parece un instalador <strong>por usuario</strong>. El despliegue corre como
+          SYSTEM, así que va a quedar en el perfil del sistema y no para el usuario.
+          Usá el instalador de sistema (por ejemplo VSCodeSetup, no VSCodeUserSetup).
+        </p>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700" for="app-uninstall">
+          Comando de desinstalación
+        </label>
+        <input
+          id="app-uninstall"
+          v-model="form.comando_desinstalacion"
+          class="sgl-input font-mono text-sm"
+          :class="{ 'border-red-400': errors.comando_desinstalacion }"
+          type="text"
+          placeholder="Start-Process 'C:\\Program Files\\App\\uninstall.exe' -Wait"
+          maxlength="2000"
+        />
+        <p v-if="errors.comando_desinstalacion" class="mt-1 text-xs text-red-600">
+          {{ errors.comando_desinstalacion }}
+        </p>
+        <p v-else class="mt-1 text-xs text-slate-400">
+          Opcional. Si queda vacío, en los instaladores .msi se usa
+          <span class="font-mono">msiexec /x</span>.
         </p>
       </div>
 

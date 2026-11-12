@@ -4,6 +4,7 @@ export const CHECKSUM_PATTERN = /^[a-f0-9]{64}$/i
 export const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/
 export const REMOTE_URL_PATTERN = /^(https?|ftp):\/\//i
 export const MAX_PARAMS = 2000
+export const MAX_COMANDO = 2000
 
 export interface AppFormValues {
   nombre: string
@@ -11,6 +12,7 @@ export interface AppFormValues {
   parametros_silenciosos?: string
   version: string
   checksum: string
+  comando_desinstalacion?: string
 }
 
 /** Quita espacios, el prefijo `sha256:` y pasa a minúsculas (HU-COM-07). */
@@ -63,6 +65,11 @@ export function validateAppForm(form: AppFormValues): Record<string, string> {
 
   if (parametros.length > MAX_PARAMS) {
     errors.parametros_silenciosos = `Los parámetros no pueden superar los ${MAX_PARAMS} caracteres.`
+  }
+
+  const comando = String(form.comando_desinstalacion || '')
+  if (comando.length > MAX_COMANDO) {
+    errors.comando_desinstalacion = `El comando no puede superar los ${MAX_COMANDO} caracteres.`
   }
 
   return errors

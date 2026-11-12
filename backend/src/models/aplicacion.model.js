@@ -16,6 +16,8 @@ const Aplicacion = sequelize.define(
     checksum: { type: DataTypes.STRING(128), allowNull: false },
     // 'upload' = el instalador fue subido por el administrador; 'ruta' = ya estaba en el servidor.
     origen: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'ruta' },
+    // HU-COM-08: comando de desinstalacion remota (CA-04).
+    comando_desinstalacion: { type: DataTypes.TEXT },
   },
   {
     tableName: 'aplicacion',

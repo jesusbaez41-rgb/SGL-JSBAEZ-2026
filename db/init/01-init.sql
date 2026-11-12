@@ -149,6 +149,7 @@ CREATE TABLE aplicacion (
     version                VARCHAR(32)  NOT NULL,
     checksum               VARCHAR(128) NOT NULL,   -- SHA-256
     origen                 VARCHAR(16)  NOT NULL DEFAULT 'ruta', -- upload | ruta (HU-COM-07)
+    comando_desinstalacion TEXT,                        -- HU-COM-08 (CA-04)
     created_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
@@ -208,6 +209,8 @@ CREATE TABLE despliegue_equipo (
     equipo_id      UUID NOT NULL REFERENCES equipo(id)     ON DELETE RESTRICT,
     estado         VARCHAR(16) NOT NULL DEFAULT 'PENDIENTE'
                    CHECK (estado IN ('PENDIENTE','EN_PROCESO','COMPLETADO','FALLIDO')),
+    fase           VARCHAR(24),                              -- HU-COM-08: fase visible
+    salida         TEXT,                                    -- HU-COM-08: salida del agente
     mensaje_error  VARCHAR(512),
     intentos       INTEGER     NOT NULL DEFAULT 0,
     fecha_reporte  TIMESTAMPTZ,

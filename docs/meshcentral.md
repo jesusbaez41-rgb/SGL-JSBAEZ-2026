@@ -615,3 +615,51 @@ En el servidor, el log debe mostrar `Agent connected` y **no** el mensaje
 - El agente se instala como servicio `LocalSystem`; limita quién puede
   administrar MeshCentral.
 - Revocar el token de GitHub expuesto durante la subida del repositorio.
+
+## Prevención: el hash del certificado de los agentes
+
+### Por que se rompe
+
+El agente de MeshCentral fija (pin) el hash de la clave publica del
+certificado web del servidor. Si los certificados del servidor se regeneran,
+todos los agentes quedan con un hash anterior: la sesion se queda en
+`holding connection`, la PC **nunca** vuelve a reportar y figura **APAGADA**
+aunque este encendida y con un usuario logueado.
+
+En el log del servidor:
+
+```
+journalctl -u meshcentral | grep "bad web cert hash"
+```
+
+### Cuando ocurre
+
+| Situacion | Se rompe? |
+|---|---|
+| Reinicio del servidor Ubuntu | **No**. Los certificados viven en `/opt/meshcentral/meshcentral-data` y se reutilizan |
+| Reinicio del servicio `meshcentral` | **No**. Verificado: el agente reconecta en ~10 s sin errores |
+| Reinicio del contenedor de Docker | **No** (no afecta a MeshCentral) |
+| Recreacion de `/opt/meshcentral/meshcentral-data` (reinstalacion) | **Si**. Se generan certificados nuevos |
+
+### Lo que dejo instalado
+
+| Pieza | Que hace |
+|---|---|
+| `scripts/mesh-agent-installer.sh` | Regenera el instalador del agente con el hash y la URL vigentes, y lo deja en `frontend/static/meshagent64-SGL-Lab.exe` (se sirve en `/mesh/instalador`) |
+| `scripts/meshcentral-guard.sh` + `sgl-meshcentral-guard.timer` | Cada 5 minutos busca `bad web cert hash` en el log; si aparece, regenera el instalador y avisa por syslog y en `/var/log/sgl-mesh-guard.log` |
+| `scripts/meshcentral-backup.sh` + `sgl-meshcentral-backup.timer` | Respaldo diario de la carpeta de datos (certificados y bases, 56 KB; excluye los binarios re-descargables). Si la carpeta se recrea, se restaura desde `/opt/meshcentral-backup` y los agentes siguen conectando |
+
+### Procedimiento si aun asi se rompe
+
+```bash
+# 1. ver si hay agentes con el hash viejo
+journalctl -u meshcentral --since "1 hour ago" | grep "bad web cert hash"
+
+# 2. regenerar el instalador (el guard tambien lo hace solo)
+sudo bash /opt/sgl-web/scripts/mesh-agent-installer.sh
+
+# 3. reinstalar el agente en la PC (consola como administrador)
+meshagent64-SGL-Lab.exe -fullinstall
+```
+
+Ver `docs/agent-windows.md` para el detalle de la instalacion en Windows.

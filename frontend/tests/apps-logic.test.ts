@@ -34,6 +34,7 @@ function makeApp(overrides: Partial<AppRow> = {}): AppRow {
     version: '128.0',
     checksum: CHECKSUM,
     origen: 'ruta',
+    comando_desinstalacion: null,
     created_at: null,
     vinculos_activos: 1,
     laboratorios: ['lab-1'],

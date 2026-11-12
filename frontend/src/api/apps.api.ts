@@ -8,6 +8,7 @@ export interface AppRow {
   version: string
   checksum: string
   origen: string
+  comando_desinstalacion: string | null
   created_at: string | null
   vinculos_activos: number
   laboratorios: string[]
@@ -39,6 +40,7 @@ export interface AppPayload {
   parametros_silenciosos?: string
   version: string
   checksum: string
+  comando_desinstalacion?: string
 }
 
 export interface VerifyResult {
