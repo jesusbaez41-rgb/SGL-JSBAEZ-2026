@@ -79,7 +79,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'aplicaciones',
         name: 'aplicaciones',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/apps/AppsView.vue'),
         meta: { permission: 'apps:read', title: 'Aplicaciones' },
       },
       {

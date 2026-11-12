@@ -148,6 +148,7 @@ CREATE TABLE aplicacion (
     parametros_silenciosos TEXT,
     version                VARCHAR(32)  NOT NULL,
     checksum               VARCHAR(128) NOT NULL,   -- SHA-256
+    origen                 VARCHAR(16)  NOT NULL DEFAULT 'ruta', -- upload | ruta (HU-COM-07)
     created_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 

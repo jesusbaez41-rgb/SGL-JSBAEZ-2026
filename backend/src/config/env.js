@@ -56,6 +56,9 @@ const env = {
   meshSyncMinutes: Number(process.env.MESH_SYNC_MINUTES || 5),
   meshApiTimeoutMs: Number(process.env.MESH_API_TIMEOUT_MS || 8000),
 
+  // HU-COM-07: directorio base para rutas relativas de instaladores.
+  appsInstallersDir: process.env.APPS_INSTALLERS_DIR || '/opt/sgl-instaladores',
+
   corsOrigin: process.env.CORS_ORIGIN || '*',
 };
 

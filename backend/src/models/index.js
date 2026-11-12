@@ -8,6 +8,8 @@ const Equipo = require('./equipo.model');
 const SesionWeb = require('./sesionWeb.model');
 const EventoAutenticacion = require('./eventoAutenticacion.model');
 const Auditoria = require('./auditoria.model');
+const Aplicacion = require('./aplicacion.model');
+const VinculoAppLab = require('./vinculoAppLab.model');
 
 // HU-COM-03: un laboratorio tiene muchos equipos y cada equipo pertenece a uno.
 Laboratorio.hasMany(Equipo, { foreignKey: 'laboratorio_id', as: 'equipos' });
@@ -44,6 +46,12 @@ MembresiaGrupo.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
 AsignacionDocente.belongsTo(Usuario, { foreignKey: 'docente_id', as: 'docente' });
 AsignacionDocente.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
 
+// HU-COM-07: catálogo de aplicaciones y vínculos con laboratorios.
+Aplicacion.hasMany(VinculoAppLab, { foreignKey: 'app_id', as: 'vinculos' });
+VinculoAppLab.belongsTo(Aplicacion, { foreignKey: 'app_id', as: 'aplicacion' });
+Laboratorio.hasMany(VinculoAppLab, { foreignKey: 'laboratorio_id', as: 'vinculosApp' });
+VinculoAppLab.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+
 module.exports = {
   sequelize,
   Usuario,
@@ -55,4 +63,6 @@ module.exports = {
   SesionWeb,
   EventoAutenticacion,
   Auditoria,
+  Aplicacion,
+  VinculoAppLab,
 };

@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
 **Última revisión:** 2026-11-05  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), administración de grupos y membresías (HU-COM-05), specs.
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), administración de grupos y membresías (HU-COM-05), catálogo de aplicaciones e instaladores (HU-COM-07), specs.
 
 ## Resultado global
 
@@ -21,6 +21,7 @@
 | Laboratorios y equipos (HU-COM-03) | **Implementado** (CA-06 verificado con `sgl-win`) |
 | Registro y monitoreo de PCs con MeshCentral (HU-COM-04) | **Implementado** (MAC/hostname/IP, sync y estado en vivo) |
 | Grupos y membresías con Samba AD (HU-COM-05) | **Implementado** (CRUD, estudiantes, docentes y auditoría) |
+| Catálogo de aplicaciones e instaladores (HU-COM-07) | **Implementado** (SHA-256, metadatos y vínculos por laboratorio) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
@@ -223,6 +224,43 @@ El detalle está en `specs/hu-04.md`.
 
 El detalle está en `specs/hu-05.md`.
 
+## HU-COM-07 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Verificación del checksum antes de guardar (RNF-006) | ✅ | `apps.checksum.js` + `apps.service.create/update` (SHA-256 por streaming) |
+| CA-02 | Solo se despliega si la app está vinculada al laboratorio (RN-002) | ✅ | `apps.service.link` + `assertAppLinked` |
+| CA-03 | Una sola versión activa por app y laboratorio (RN-007) | ✅ | `apps.service.link` + índice `ux_vinculo_app_lab_activo` |
+| CA-04 | Registro de ruta, parámetros, versión y checksum | ✅ | Tabla `aplicacion`, `apps.validators.js` y `AppsView.vue` |
+| CA-05 | Auditoría de acciones críticas (RN-010) | ✅ | `recordAuditEvent` en altas, cambios, bajas, vínculos y verificación |
+| CA-06 | Subida del instalador con SHA-256 automático (RNF-006) | ✅ | `apps.upload.js` + `apps.storage.js` + `apps.service.createFromUpload` |
+
+**Resumen HU-COM-07:** 6 CA cumplidos · 0 pendientes.
+
+**Decisiones de diseño:**
+
+- El checksum se normaliza a SHA-256 hexadecimal (64 caracteres) y se calcula
+  leyendo el archivo por streaming.
+- Si el instalador no existe, la ruta es remota o el hash no coincide, no se
+  guarda la fila y se devuelve `400`.
+- El vínculo app-laboratorio se crea sin permisos de grupo (RN-008); los
+  permisos se habilitan en una HU posterior.
+- Desvincular conserva el historial (`activo = false`), por lo que RN-007 solo
+  limita las filas activas.
+- Con vínculos activos no se permite cambiar nombre ni versión de la app.
+- `assertAppLinked` queda disponible para HU-COM-08 como precondición de
+  despliegue (RN-002).
+- El instalador se puede subir desde el navegador (arrastrar `.msi`/`.exe`):
+  el backend lo guarda en `APPS_INSTALLERS_DIR`, calcula el SHA-256 y da de
+  alta la app en un paso. La columna `aplicacion.origen` distingue `upload`
+  de `ruta` (migración `05-hu07-apps-upload.sql`).
+- Extensiones permitidas: `.msi`, `.exe`, `.msix`, `.appx`, `.zip`. Tamaño
+  máximo por archivo: `APPS_MAX_UPLOAD_MB` (1024 MB por defecto).
+- Si el alta de una app subida falla, el archivo se borra del servidor; al
+  eliminar la app, el instalador se borra solo si ninguna otra app lo usa.
+
+El detalle está en `specs/hu-07.md`.
+
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -232,15 +270,15 @@ El detalle está en `specs/hu-05.md`.
 | Regla | Estado | Evidencia verificada | Falta |
 |---|---|---|---|
 | RN-001 | Cubierta (BD + API/UI + sync) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio; el sync lo infiere por subred y no crea PCs huérfanas | — |
-| RN-002 | Pendiente | — | Verificar vínculo app-lab antes de desplegar |
+| RN-002 | Cubierta (API) | `apps.service.link` crea el vínculo app-laboratorio y `assertAppLinked` lo exige antes de desplegar (HU-COM-07) | Invocarlo desde el despliegue (HU-COM-08) |
 | RN-003 | Pendiente | — | Generar despliegue para todas las PCs activas |
 | RN-004 | Pendiente | — | Cálculo de permisos por grupo + laboratorio |
 | RN-005 | Pendiente | — | Integración MeshAgent como servicio |
 | RN-006 | Parcial | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04, sync y auto-refresco) | Reintento individual y masivo de despliegues |
-| RN-007 | Cubierta (BD) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo` | Validación en API |
-| RN-008 | Cubierta (BD) | `permiso_app_grupo.habilitado DEFAULT FALSE` | Forzarlo en el servicio |
+| RN-007 | Cubierta (BD + API) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo`; `apps.service.link` rechaza otra versión activa y permite históricas inactivas | — |
+| RN-008 | Cubierta (BD + API) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo de HU-COM-07 no crea permisos, quedan deshabilitados por defecto | Servicio de permisos por grupo (RN-013) |
 | RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) | Auditar logon de PC en SGL (HU-COM-01), apps, permisos, despliegues y listas blancas |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) | Auditar logon de PC en SGL (HU-COM-01), permisos, despliegues y listas blancas |
 | RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
 | RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
 | RN-013 | Pendiente | — | Unión de permisos de grupos |
@@ -252,7 +290,7 @@ El detalle está en `specs/hu-05.md`.
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
 | RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
-**Resumen:** 8 cubiertas · 6 parciales · 6 pendientes.
+**Resumen:** 9 cubiertas · 6 parciales · 5 pendientes.
 
 ## Observaciones
 
@@ -271,6 +309,8 @@ El detalle está en `specs/hu-05.md`.
 13. **HU-COM-03 — laboratorios/equipos:** CRUD implementado con validación de subred, laboratorio obligatorio, unicidad de MAC/hostname y auditoría. CA-06 (estado desde MeshCentral) está implementado con bridge + UI, pendiente de probar con el agente instalado.
 14. **MeshCentral:** instalado como servicio systemd en `/opt/meshcentral` (fuera de los 3 contenedores de SGL), publicado en `/mesh/` vía Nginx y con bridge local en `172.18.0.1:4444`. Guía en `docs/meshcentral.md`.
 15. **Acceso web tras el cambio de red:** desde el host usar `http://192.168.0.50:8080/`; desde el Win10 en `sgl`, `http://192.168.100.58:8080/`. La IP `192.168.100.58` ya no es alcanzable desde el host porque no está en la red `sgl`.
+16. **HU-COM-07 — verificación de integridad:** el backend calcula el SHA-256 del archivo indicado en `ruta_instalador`; las rutas relativas se resuelven contra `APPS_INSTALLERS_DIR` (`/opt/sgl-instaladores`). El binario debe ser legible por el contenedor `sgl-backend`; no se admiten URLs remotas. El directorio debe ser escribible por el usuario
+   del backend porque también es el destino de los instaladores subidos (CA-06).
 
 ## Qué significa "Cubierta (BD)"
 
