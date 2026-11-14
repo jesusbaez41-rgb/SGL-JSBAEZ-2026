@@ -528,6 +528,35 @@ async function deployToDevice(payload) {
 
 
 /**
+ * Aplica una política AppLocker en el equipo (HU-COM-06).
+ * Guarda el XML, habilita el servicio AppIDSvc y aplica la política local.
+ */
+async function aplicarPolitica(nodeid, xml, nombre, scriptFile) {
+  const base64 = Buffer.from(String(xml || ''), 'utf8').toString('base64');
+  const destino = `${REMOTE_TEMP_DIR}\\sgl-politica-${nombre || 'actual'}.xml`;
+
+  const urlScript = scriptFile
+    ? `${INSTALADORES_URL.replace(/\/$/, '')}/${encodeURIComponent(scriptFile)}`
+    : null;
+
+  const comando = [
+    "$ErrorActionPreference='Stop'",
+    `$xml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64}'))`,
+    `Set-Content -Path '${destino}' -Value $xml -Encoding UTF8`,
+    urlScript ? "New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null" : null,
+    urlScript ? `Invoke-WebRequest -Uri '${urlScript}' -OutFile 'C:\\ProgramData\\SGL\\SGL-Lockdown.ps1' -UseBasicParsing` : null,
+    urlScript ? "$accion = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\ProgramData\\SGL\\SGL-Lockdown.ps1'" : null,
+    urlScript ? "$principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited" : null,
+    urlScript ? "Register-ScheduledTask -TaskName 'SGL-Lockdown' -Action $accion -Principal $principal -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Force | Out-Null" : null,
+    "Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue",
+    `Set-AppLockerPolicy -XmlPolicy '${destino}' -ErrorAction Stop`,
+    "Write-Output 'SGL_EXITCODE=0'",
+  ].filter(Boolean).join('; ');
+
+  return runCommandOnDevice(nodeid, comando, 60000);
+}
+
+/**
  * Lanza la instalacion DESACOPLADA del agente.
  *
  * El agente de MeshCentral tiene un solo slot de comandos: si un
@@ -700,6 +729,32 @@ const server = http.createServer(async (req, res) => {
         salida: 'Instalación lanzada en el equipo.',
         comando: command,
         resultado_id: resultadoId,
+      });
+    } catch (err) {
+      console.error('[mesh-bridge]', err.message);
+      sendJson(res, 502, { error: err.message });
+    }
+    return;
+  }
+
+  // HU-COM-06: aplicar una política AppLocker en el equipo.
+  if (url.pathname === '/politica' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const nodeid = String(body.nodeid || '').trim();
+      if (!nodeid) throw new Error('Falta el identificador del equipo (nodeid)');
+      const salida = await aplicarPolitica(nodeid, body.xml, body.nombre, body.script_file);
+
+      if (equipoSinConexion(salida)) {
+        sendJson(res, 200, { ok: false, error: 'EQUIPO_APAGADO', salida: String(salida || '').trim() });
+        return;
+      }
+
+      const codigo = parseExitCode(salida);
+      sendJson(res, 200, {
+        ok: codigo === 0,
+        codigo,
+        salida: String(salida || '').trim(),
       });
     } catch (err) {
       console.error('[mesh-bridge]', err.message);

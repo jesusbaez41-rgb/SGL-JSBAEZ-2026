@@ -15,6 +15,7 @@ Es **normativa vinculante**: cualquier cambio en el sistema debe respetarla.
 | `hu-03.md` | HU-COM-03: laboratorios, equipos y estado desde MeshCentral. |
 | `hu-04.md` | HU-COM-04: registro y monitoreo de PCs con agente MeshCentral. |
 | `hu-05.md` | HU-COM-05: administración de grupos y membresías con Samba AD. |
+| `hu-06.md` | HU-COM-06: permisos de aplicaciones por grupo, ejecución y bloqueo con AppLocker. |
 | `hu-07.md` | HU-COM-07: catálogo de aplicaciones e instaladores con verificación SHA-256 y vínculos a laboratorios. |
 | `hu-08.md` | HU-COM-08: despliegue remoto de aplicaciones (instalación/desinstalación masiva vía MeshCentral). |
 | `diagrama-clases.md` | Diagrama de clases UML del dominio, servicios backend y frontend (PlantUML/Mermaid). |

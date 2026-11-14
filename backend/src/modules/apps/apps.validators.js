@@ -40,12 +40,24 @@ function validateCreateApp(body) {
     errors.push(`El comando de desinstalación no puede superar los ${MAX_COMANDO} caracteres.`);
   }
 
+  if (body.ruta_ejecutable !== undefined && String(body.ruta_ejecutable || '').length > 512) {
+    errors.push('La ruta del ejecutable no puede superar los 512 caracteres.');
+  }
+
   return errors;
 }
 
 function validateUpdateApp(body) {
   const errors = [];
-  const fields = ['nombre', 'ruta_instalador', 'version', 'checksum', 'parametros_silenciosos'];
+  const fields = [
+    'nombre',
+    'ruta_instalador',
+    'version',
+    'checksum',
+    'parametros_silenciosos',
+    'comando_desinstalacion',
+    'ruta_ejecutable',
+  ];
   const hasField = fields.some((key) => body[key] !== undefined);
 
   if (!hasField) errors.push('Debe enviar al menos un campo para actualizar.');

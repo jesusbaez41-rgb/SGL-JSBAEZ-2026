@@ -18,6 +18,8 @@ const Aplicacion = sequelize.define(
     origen: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'ruta' },
     // HU-COM-08: comando de desinstalacion remota (CA-04).
     comando_desinstalacion: { type: DataTypes.TEXT },
+    // HU-COM-06: ruta del ejecutable YA INSTALADO (la usa AppLocker).
+    ruta_ejecutable: { type: DataTypes.STRING(512) },
   },
   {
     tableName: 'aplicacion',

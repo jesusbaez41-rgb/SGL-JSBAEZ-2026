@@ -91,7 +91,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'politicas',
         name: 'politicas',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/policies/PoliciesView.vue'),
         meta: { permission: 'policies:read', title: 'Políticas' },
       },
       {

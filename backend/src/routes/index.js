@@ -27,5 +27,6 @@ router.use('/labs', authMiddleware, require('../modules/labs/labs.routes'));
 router.use('/equipment', authMiddleware, require('../modules/equipment/equipment.routes'));
 router.use('/apps', authMiddleware, require('../modules/apps/apps.routes'));
 router.use('/deployments', authMiddleware, require('../modules/deployments/deployments.routes'));
+router.use('/policies', authMiddleware, require('../modules/policies/policies.routes'));
 
 module.exports = router;

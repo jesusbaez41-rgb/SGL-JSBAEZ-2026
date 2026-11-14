@@ -23,6 +23,7 @@
 | Grupos y membresías con Samba AD (HU-COM-05) | **Implementado** (CRUD, estudiantes, docentes y auditoría) |
 | Catálogo de aplicaciones e instaladores (HU-COM-07) | **Implementado** (SHA-256, metadatos y vínculos por laboratorio) |
 | Despliegue remoto de aplicaciones (HU-COM-08) | **Implementado** (despliegue masivo vía MeshCentral, estado por equipo y reintentos) |
+| Permisos por grupo y políticas de ejecución (HU-COM-06) | **Implementado** (matriz app × grupo, AppLocker y despliegue a las PCs) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
 | Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
@@ -295,6 +296,38 @@ El detalle está en `specs/hu-07.md`.
   `POST /desplegar` además de `GET /devices`.
 
 El detalle está en `specs/hu-08.md`.
+## HU-COM-06 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Restricción por defecto (RN-008) | ✓ | `permiso_app_grupo.habilitado DEFAULT FALSE`; ausencia = `false` en la matriz |
+| CA-02 | Unión de permisos (RN-013) | ✓ | `policies.service.efectivos` (unión por laboratorio) |
+| CA-03 | Bloqueo efectivo (RN-009) | ✓ | Política AppLocker `EnforcementMode="Enabled"` con reglas `Allow` por SID |
+| CA-04 | Aplicación de políticas en la PC | ✓ | `Set-AppLockerPolicy -XmlPolicy` + `AppIDSvc` activo |
+| CA-05 | Bloqueo local y registro del intento | ✓ | AppLocker bloquea y registra en su Event Log |
+| CA-06 | Unión de permisos del estudiante | ✓ | `GET /api/policies/users/:id/effective` |
+| CA-07 | Generación de políticas | ✓ | `policies.service.generar` + XML por grupo y por laboratorio |
+| CA-08 | Despliegue vía MeshCentral | ✓ | `POST /api/policies/:id/deploy` → bridge `/politica` |
+| CA-09 | Auditoría del despliegue | ✓ | Eventos `CAMBIO_PERMISO`, `EJECUTAR` y `DESPLEGAR` |
+
+**Resumen HU-COM-06:** 9 CA cumplidos · 0 pendientes.
+
+**Decisiones de diseño:**
+
+- La regla AppLocker se genera por **grupo** (SID de Samba AD) y se combina en
+  una política por laboratorio; así un estudiante solo recibe las apps de sus
+  grupos (RN-004/RN-013).
+- `politica_ejecucion` guarda el XML por grupo y `politica_laboratorio` el XML
+  combinado que se despliega.
+- `aplicacion.ruta_ejecutable` es la ruta del binario instalado en la PC; si
+  falta, la app se excluye de la política y la interfaz lo avisa.
+- El despliegue usa la misma infraestructura que HU-COM-08 (estado en vivo de
+  MeshCentral, despacho por equipo y auditoría).
+- Verificado en `sgl-win`: `SrpV2\Exe` con `EnforcementMode=1`, la regla de
+  7-Zip para el SID de `GRP-1A`, y la tarea `SGL-Lockdown` creada con
+  `C:\ProgramData\SGL\SGL-Lockdown.ps1`.
+
+El detalle está en `specs/hu-06.md`.
 ## Leyenda RN
 
 - **Cubierta**: la regla se garantiza con el esquema o el código actual.
@@ -306,16 +339,16 @@ El detalle está en `specs/hu-08.md`.
 | RN-001 | Cubierta (BD + API/UI + sync) | `equipo.laboratorio_id NOT NULL` + FK `RESTRICT`; `/api/equipment` valida el laboratorio; el sync lo infiere por subred y no crea PCs huérfanas | — |
 | RN-002 | Cubierta (API + despliegue) | `apps.service.link` crea el vínculo app-laboratorio y `assertAppLinked` lo exige antes de desplegar (HU-COM-07); el despliegue de HU-COM-08 lo invoca y responde `409 APP_NO_VINCULADA` | — |
 | RN-003 | Cubierta (API) | `deployments.service.create` genera un despliegue para todas las PCs del laboratorio y no permite seleccionar PCs individuales (HU-COM-08) | — |
-| RN-004 | Pendiente | — | Cálculo de permisos por grupo + laboratorio |
+| RN-004 | Cubierta (API) | `policies.service.efectivos` calcula la unión de permisos de los grupos del estudiante; la regla AppLocker se limita al SID del grupo y al laboratorio del vínculo (HU-COM-06) | Intento de ejecución bloqueado visible en SGL |
 | RN-005 | Cubierta (infra + API) | El agente se instala como servicio Windows `LocalSystem` (`docs/agent-windows.md`); las órdenes viajan por `meshctrl RunCommand --powershell` (HU-COM-08) | — |
 | RN-006 | Cubierta (BD + API) | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04); reintento individual (`POST /:id/retry` con `equipo_id`) y masivo, más barrido automático de los equipos que se encienden (HU-COM-08) | — |
 | RN-007 | Cubierta (BD + API) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo`; `apps.service.link` rechaza otra versión activa y permite históricas inactivas | — |
-| RN-008 | Cubierta (BD + API) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo de HU-COM-07 no crea permisos, quedan deshabilitados por defecto | Servicio de permisos por grupo (RN-013) |
-| RN-009 | Pendiente | — | Políticas polkit/GPO + auditoría |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) + despliegues y reintentos (HU-COM-08) | Auditar logon de PC en SGL (HU-COM-01), permisos por grupo y listas blancas |
+| RN-008 | Cubierta (BD + API + PC) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo no crea permisos; la política AppLocker usa `EnforcementMode="Enabled"` y deniega por defecto lo no autorizado (HU-COM-06) | — |
+| RN-009 | Cubierta (PC + API) | AppLocker aplica reglas `Allow` por SID de grupo y bloquea el resto; el despliegue y los cambios de permisos se auditan. El Event Log de AppLocker queda disponible en la PC (HU-COM-06) | Mostrar los intentos bloqueados en SGL |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) + despliegues y reintentos (HU-COM-08) + permisos por grupo y despliegue de políticas (HU-COM-06) | Auditar logon de PC en SGL (HU-COM-01) y listas blancas |
 | RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
 | RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
-| RN-013 | Pendiente | — | Unión de permisos de grupos |
+| RN-013 | Cubierta (API) | `GET /api/policies/users/:id/effective` devuelve la unión de apps de todos los grupos activos del estudiante, agrupada por laboratorio (HU-COM-06) | — |
 | RN-014 | Cubierta (BD + API) | FK `ON DELETE CASCADE` en membresías/asignaciones; `groups.service.remove` elimina el grupo en Samba AD y las relaciones, sin borrar usuarios | — |
 | RN-015 | Cubierta (API + UI) | `groups.service.addStudent` exige `rol = ESTUDIANTE`; `addTeacher` exige `rol = DOCENTE` y usa `asignacion_docente`; la UI filtra por rol | Trigger de BD como defensa en profundidad |
 | RN-016 | Parcial | Tabla `lista_blanca_url` por grupo | Unión de listas + proxy/firewall |
@@ -324,7 +357,7 @@ El detalle está en `specs/hu-08.md`.
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
 | RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
 
-**Resumen:** 12 cubiertas · 5 parciales · 3 pendientes.
+**Resumen:** 15 cubiertas · 5 parciales · 0 pendientes.
 
 ## Observaciones
 

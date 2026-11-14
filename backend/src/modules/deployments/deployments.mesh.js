@@ -238,6 +238,47 @@ async function resultado({ nodeid, resultadoId }) {
 }
 
 /**
+ * Aplica una política AppLocker en el equipo (HU-COM-06, CA-08).
+ */
+async function aplicarPolitica({ nodeid, xml, nombre, scriptFile }) {
+  if (!isConfigured()) {
+    throw httpError(503, 'La integración con MeshCentral no está configurada.', 'MESH_NO_CONFIGURADO');
+  }
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl()}/politica`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ nodeid, xml, nombre, script_file: scriptFile || null }),
+      signal: AbortSignal.timeout(Number(env.meshApiTimeoutMs || 15000) * 4),
+    });
+  } catch (err) {
+    throw httpError(502, `No se pudo contactar al bridge MeshCentral: ${err.message}`, 'MESH_NO_CONTACTO');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const mensaje = (payload && payload.error) || `MeshCentral respondió ${response.status}`;
+    throw httpError(502, mensaje, 'MESH_ERROR');
+  }
+
+  return {
+    ok: Boolean(payload && payload.ok),
+    codigo: payload ? payload.codigo : null,
+    salida: payload ? payload.salida : null,
+    equipoApagado: Boolean(payload && payload.error === 'EQUIPO_APAGADO'),
+    error: payload && payload.error ? payload.error : null,
+  };
+}
+
+/**
  * Estado actual de un equipo según MeshCentral. Si el bridge no responde se
  * devuelve null y el llamador conserva el estado guardado (CA-02).
  */
@@ -265,4 +306,13 @@ async function estadoEquipo(meshAgentId) {
   }
 }
 
-module.exports = { isConfigured, subir, ejecutar, resultado, desplegar, estados, estadoEquipo };
+module.exports = {
+  isConfigured,
+  subir,
+  ejecutar,
+  resultado,
+  desplegar,
+  estados,
+  estadoEquipo,
+  aplicarPolitica,
+};

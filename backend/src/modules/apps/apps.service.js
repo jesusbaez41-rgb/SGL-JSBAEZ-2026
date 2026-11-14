@@ -43,6 +43,9 @@ function normalizeAppPayload(payload) {
     comando_desinstalacion: payload.comando_desinstalacion
       ? String(payload.comando_desinstalacion).trim()
       : null,
+    ruta_ejecutable: payload.ruta_ejecutable
+      ? String(payload.ruta_ejecutable).trim()
+      : null,
   };
 }
 
@@ -62,6 +65,7 @@ function toApp(app, counts = {}) {
     checksum: data.checksum,
     origen: data.origen || 'ruta',
     comando_desinstalacion: data.comando_desinstalacion || null,
+    ruta_ejecutable: data.ruta_ejecutable || null,
     created_at: data.created_at || null,
     vinculos_activos: counts.activos || 0,
     laboratorios: counts.laboratorios || [],
@@ -337,6 +341,11 @@ async function update(req, id, payload) {
   if (payload.comando_desinstalacion !== undefined) {
     changes.comando_desinstalacion = payload.comando_desinstalacion
       ? String(payload.comando_desinstalacion).trim()
+      : null;
+  }
+  if (payload.ruta_ejecutable !== undefined) {
+    changes.ruta_ejecutable = payload.ruta_ejecutable
+      ? String(payload.ruta_ejecutable).trim()
       : null;
   }
 

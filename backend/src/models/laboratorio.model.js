@@ -8,6 +8,8 @@ const Laboratorio = sequelize.define(
     nombre: { type: DataTypes.STRING(128), allowNull: false, unique: true },
     ubicacion: { type: DataTypes.STRING(255), allowNull: false },
     subred: { type: DataTypes.STRING(64), allowNull: false },
+    // HU-COM-06: configuración de bloqueo de estudiantes.
+    bloqueo: { type: DataTypes.JSONB },
   },
   {
     tableName: 'laboratorio',

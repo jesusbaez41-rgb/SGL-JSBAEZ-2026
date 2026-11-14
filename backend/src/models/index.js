@@ -12,6 +12,10 @@ const Aplicacion = require('./aplicacion.model');
 const VinculoAppLab = require('./vinculoAppLab.model');
 const Despliegue = require('./despliegue.model');
 const DespliegueEquipo = require('./despliegueEquipo.model');
+const PermisoAppGrupo = require('./permisoAppGrupo.model');
+const PoliticaEjecucion = require('./politicaEjecucion.model');
+const PoliticaLaboratorio = require('./politicaLaboratorio.model');
+const PoliticaDespliegue = require('./politicaDespliegue.model');
 
 // HU-COM-03: un laboratorio tiene muchos equipos y cada equipo pertenece a uno.
 Laboratorio.hasMany(Equipo, { foreignKey: 'laboratorio_id', as: 'equipos' });
@@ -63,6 +67,25 @@ DespliegueEquipo.belongsTo(Despliegue, { foreignKey: 'despliegue_id', as: 'despl
 DespliegueEquipo.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
 Equipo.hasMany(DespliegueEquipo, { foreignKey: 'equipo_id', as: 'despliegues' });
 
+// HU-COM-06: permisos por grupo y políticas de ejecución.
+VinculoAppLab.hasMany(PermisoAppGrupo, { foreignKey: 'vinculo_id', as: 'permisos' });
+PermisoAppGrupo.belongsTo(VinculoAppLab, { foreignKey: 'vinculo_id', as: 'vinculo' });
+Grupo.hasMany(PermisoAppGrupo, { foreignKey: 'grupo_id', as: 'permisosApp' });
+PermisoAppGrupo.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
+
+Grupo.hasMany(PoliticaEjecucion, { foreignKey: 'grupo_id', as: 'politicas' });
+PoliticaEjecucion.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
+Laboratorio.hasMany(PoliticaEjecucion, { foreignKey: 'laboratorio_id', as: 'politicasGrupo' });
+PoliticaEjecucion.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+
+Laboratorio.hasMany(PoliticaLaboratorio, { foreignKey: 'laboratorio_id', as: 'politicas' });
+PoliticaLaboratorio.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+PoliticaLaboratorio.belongsTo(Usuario, { foreignKey: 'generada_por', as: 'autor' });
+PoliticaLaboratorio.hasMany(PoliticaDespliegue, { foreignKey: 'politica_id', as: 'despliegues' });
+PoliticaDespliegue.belongsTo(PoliticaLaboratorio, { foreignKey: 'politica_id', as: 'politica' });
+PoliticaDespliegue.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
+Equipo.hasMany(PoliticaDespliegue, { foreignKey: 'equipo_id', as: 'politicas' });
+
 module.exports = {
   sequelize,
   Usuario,
@@ -78,4 +101,8 @@ module.exports = {
   VinculoAppLab,
   Despliegue,
   DespliegueEquipo,
+  PermisoAppGrupo,
+  PoliticaEjecucion,
+  PoliticaLaboratorio,
+  PoliticaDespliegue,
 };

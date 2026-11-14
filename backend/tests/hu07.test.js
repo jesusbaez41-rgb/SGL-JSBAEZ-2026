@@ -779,7 +779,11 @@ test('HU07-25 si el alta falla, el instalador subido no queda en el servidor', a
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sgl-installers-'));
   const previous = process.env.APPS_INSTALLERS_DIR;
   process.env.APPS_INSTALLERS_DIR = dir;
-  const ctx = setup({ createError: new Error('fallo de base de datos') });
+  const ctx = setup({
+    createError: Object.assign(new Error('fallo de base de datos'), {
+      name: 'SequelizeDatabaseError',
+    }),
+  });
   t.after(() => {
     ctx.restore();
     if (previous === undefined) delete process.env.APPS_INSTALLERS_DIR;

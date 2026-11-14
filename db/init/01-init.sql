@@ -98,7 +98,9 @@ CREATE TABLE laboratorio (
     subred      VARCHAR(64)  NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT uq_laboratorio_nombre UNIQUE (nombre),
-    CONSTRAINT ck_laboratorio_subred CHECK (subred ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$')
+    CONSTRAINT ck_laboratorio_subred CHECK (subred ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}
+)
+    bloqueo              JSONB,                      -- HU-COM-06: config de bloqueo
 );
 
 -- =====================================================================
@@ -150,6 +152,7 @@ CREATE TABLE aplicacion (
     checksum               VARCHAR(128) NOT NULL,   -- SHA-256
     origen                 VARCHAR(16)  NOT NULL DEFAULT 'ruta', -- upload | ruta (HU-COM-07)
     comando_desinstalacion TEXT,                        -- HU-COM-08 (CA-04)
+    ruta_ejecutable        VARCHAR(512),                 -- HU-COM-06 (AppLocker)
     created_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
@@ -246,6 +249,32 @@ CREATE TABLE politica_ejecucion (
     version           VARCHAR(32) NOT NULL,
     fecha_generacion  TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_politica_grupo_lab UNIQUE (grupo_id, laboratorio_id)
+);
+-- HU-COM-06: politica combinada del laboratorio y su despliegue por equipo.
+CREATE TABLE politica_laboratorio (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    laboratorio_id   UUID NOT NULL REFERENCES laboratorio(id) ON DELETE CASCADE,
+    generada_por     UUID NOT NULL REFERENCES usuario(id)     ON DELETE RESTRICT,
+    version          VARCHAR(64) NOT NULL,
+    contenido        TEXT NOT NULL,
+    resumen          JSONB,
+    config           JSONB,   -- HU-COM-06: bloqueo + script desplegado
+    fecha_generacion TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_politica_lab ON politica_laboratorio (laboratorio_id);
+
+CREATE TABLE politica_despliegue (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    politica_id   UUID NOT NULL REFERENCES politica_laboratorio(id) ON DELETE CASCADE,
+    equipo_id     UUID NOT NULL REFERENCES equipo(id) ON DELETE CASCADE,
+    estado        VARCHAR(16) NOT NULL DEFAULT 'PENDIENTE'
+                  CHECK (estado IN ('PENDIENTE','EN_PROCESO','COMPLETADO','FALLIDO')),
+    mensaje_error VARCHAR(512),
+    salida        TEXT,
+    intentos      INTEGER NOT NULL DEFAULT 0,
+    fecha_reporte TIMESTAMPTZ,
+    CONSTRAINT uq_politica_equipo UNIQUE (politica_id, equipo_id)
 );
 
 -- =====================================================================

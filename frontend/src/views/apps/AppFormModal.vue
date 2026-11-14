@@ -30,6 +30,7 @@ const form = reactive({
   parametros_silenciosos: props.app?.parametros_silenciosos || '',
   checksum: props.app?.checksum || '',
   comando_desinstalacion: props.app?.comando_desinstalacion || '',
+  ruta_ejecutable: props.app?.ruta_ejecutable || '',
 })
 
 const errors = reactive<Record<string, string>>({})
@@ -101,6 +102,7 @@ async function submit() {
       payload.append('version', form.version.trim())
       payload.append('parametros_silenciosos', form.parametros_silenciosos.trim())
       payload.append('comando_desinstalacion', form.comando_desinstalacion.trim())
+      payload.append('ruta_ejecutable', form.ruta_ejecutable.trim())
 
       const result = isEdit.value && props.app
         ? await appsApi.replaceInstaller(props.app.id, payload)
@@ -117,6 +119,7 @@ async function submit() {
       parametros_silenciosos: form.parametros_silenciosos.trim(),
       checksum: normalizeChecksum(form.checksum),
       comando_desinstalacion: form.comando_desinstalacion.trim(),
+      ruta_ejecutable: form.ruta_ejecutable.trim(),
     }
     const saved = isEdit.value && props.app
       ? await appsApi.update(props.app.id, payload)
@@ -336,6 +339,24 @@ async function submit() {
         <p v-else class="mt-1 text-xs text-slate-400">
           Opcional. Si queda vacío, en los instaladores .msi se usa
           <span class="font-mono">msiexec /x</span>.
+        </p>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700" for="app-exe">
+          Ruta del ejecutable instalado
+        </label>
+        <input
+          id="app-exe"
+          v-model="form.ruta_ejecutable"
+          class="sgl-input font-mono text-sm"
+          type="text"
+          placeholder="C:\\Program Files\\7-Zip\\7zFM.exe"
+          maxlength="512"
+        />
+        <p class="mt-1 text-xs text-slate-400">
+          Ruta del binario en la PC. La usa AppLocker para la política de
+          ejecución por grupo (HU-COM-06).
         </p>
       </div>
 
