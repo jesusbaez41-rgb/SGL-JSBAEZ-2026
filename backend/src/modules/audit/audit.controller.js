@@ -1,4 +1,24 @@
-const { listAuthEvents } = require('./audit.service');
+const { listAuthEvents, listAuditLogs } = require('./audit.service');
+const { validateList, parseList } = require('./audit.validators');
+
+function httpError(status, message, code) {
+  const err = new Error(message);
+  err.status = status;
+  err.code = code;
+  return err;
+}
+
+async function logs(req, res, next) {
+  try {
+    const errors = validateList(req.query);
+    if (errors.length) {
+      throw httpError(400, errors.join(' '), 'AUDIT_FILTRO_INVALIDO');
+    }
+    res.json(await listAuditLogs(parseList(req.query)));
+  } catch (err) {
+    next(err);
+  }
+}
 
 async function events(req, res, next) {
   try {
@@ -11,4 +31,4 @@ async function events(req, res, next) {
   }
 }
 
-module.exports = { events };
+module.exports = { logs, events };

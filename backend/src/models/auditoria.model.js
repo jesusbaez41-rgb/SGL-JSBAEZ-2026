@@ -14,6 +14,9 @@ const Auditoria = sequelize.define(
     entidad_afectada: { type: DataTypes.STRING(64), allowNull: false },
     entidad_id: { type: DataTypes.UUID },
     detalle: { type: DataTypes.JSONB },
+    // HU-COM-12: contexto consultable (CA-02).
+    laboratorio_id: { type: DataTypes.UUID },
+    equipo_id: { type: DataTypes.UUID },
     ip_origen: { type: DataTypes.STRING(45) },
     fecha_evento: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     inmutable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },

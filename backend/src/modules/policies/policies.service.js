@@ -146,6 +146,7 @@ async function setBloqueo(req, laboratorioId, payload) {
     accion: 'ACTUALIZAR',
     entidad: 'laboratorio',
     entidadId: laboratorio.id,
+    laboratorioId: laboratorio.id,
     detalle: { operacion: 'CONFIG_BLOQUEO', config },
   });
 
@@ -235,6 +236,7 @@ async function setPermiso(req, payload) {
     accion: 'CAMBIO_PERMISO',
     entidad: 'permiso_app_grupo',
     entidadId: permiso.id,
+    laboratorioId: vinculo.laboratorio_id,
     detalle: {
       vinculo_id: vinculoId,
       grupo: grupo.codigo,
@@ -796,6 +798,7 @@ async function desplegar(req, id) {
     accion: 'DESPLEGAR',
     entidad: 'politica',
     entidadId: politica.id,
+    laboratorioId: politica.laboratorio_id,
     detalle: {
       operacion: 'DESPLEGAR_POLITICA',
       version: toPlain(politica).version,

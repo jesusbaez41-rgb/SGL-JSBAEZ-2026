@@ -403,7 +403,7 @@ function applyDeviceChanges(equipo, device) {
   return changes;
 }
 
-async function syncFromMesh(req, { laboratorioId = null } = {}) {
+async function syncFromMesh(req, { laboratorioId = null, background = false } = {}) {
   const state = await loadMeshDevices();
 
   if (state.error) {
@@ -514,29 +514,34 @@ async function syncFromMesh(req, { laboratorioId = null } = {}) {
     summary.detalle = summary.detalle.slice(0, 50);
   }
 
-  await recordAuditEvent(req, {
-    accion: 'ACTUALIZAR',
-    entidad: 'equipo',
-    entidadId: null,
-    detalle: {
-      operacion: 'SINCRONIZAR',
-      source: 'MESHCENTRAL',
+  // Las corridas automaticas sin cambios no generan ruido en la auditoria.
+  if (!(background && summary.creados === 0 && summary.actualizados === 0)) {
+    await recordAuditEvent(req, {
+      accion: 'ACTUALIZAR',
+      entidad: 'equipo',
+      entidadId: null,
+      detalle: {
+        operacion: 'SINCRONIZAR',
+        origen: background ? 'SISTEMA' : 'USUARIO',
+        automatico: background,
+        source: 'MESHCENTRAL',
       laboratorio_id: requestedLab ? requestedLab.id : null,
       creados: summary.creados,
       actualizados: summary.actualizados,
       total: summary.total,
       sin_laboratorio: summary.sin_laboratorio,
-      sin_mac: summary.sin_mac,
-      errores: summary.errores,
-    },
-  });
+        sin_mac: summary.sin_mac,
+        errores: summary.errores,
+      },
+    });
+  }
 
   return summary;
 }
 
 async function sync(req) {
   const laboratorioId = req && req.body ? req.body.laboratorio_id : null;
-  return syncFromMesh(req, { laboratorioId: laboratorioId || null });
+  return syncFromMesh(req, { laboratorioId: laboratorioId || null, background: false });
 }
 
 async function refresh(req, id) {

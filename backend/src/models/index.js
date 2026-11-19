@@ -17,6 +17,11 @@ const PoliticaEjecucion = require('./politicaEjecucion.model');
 const PoliticaLaboratorio = require('./politicaLaboratorio.model');
 const PoliticaDespliegue = require('./politicaDespliegue.model');
 
+// HU-COM-12: la auditoria se consulta con el actor y el contexto.
+Auditoria.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+Auditoria.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+Auditoria.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
+
 // HU-COM-03: un laboratorio tiene muchos equipos y cada equipo pertenece a uno.
 Laboratorio.hasMany(Equipo, { foreignKey: 'laboratorio_id', as: 'equipos' });
 Equipo.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });

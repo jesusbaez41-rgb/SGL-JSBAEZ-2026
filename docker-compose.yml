@@ -29,7 +29,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgres://${DB_APP_USER}:${DB_APP_PASSWORD}@db:5432/${POSTGRES_DB}
       # HU-COM-07: directorio base de los instaladores (rutas relativas).
       APPS_INSTALLERS_DIR: ${APPS_INSTALLERS_DIR:-/opt/sgl-instaladores}
       # HU-COM-07: tamano maximo por instalador subido (MB).
@@ -41,6 +41,8 @@ services:
       - uploads:/app/uploads
       # HU-COM-07: los instaladores se verifican por SHA-256 dentro del contenedor.
       - ${APPS_INSTALLERS_DIR:-/opt/sgl-instaladores}:/opt/sgl-instaladores
+      # HU-COM-12: migraciones disponibles para las pruebas.
+      - ./db:/app/db:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

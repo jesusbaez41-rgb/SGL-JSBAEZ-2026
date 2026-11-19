@@ -452,6 +452,7 @@ async function create(req, payload) {
     accion: 'DESPLEGAR',
     entidad: 'despliegue',
     entidadId: despliegue.id,
+    laboratorioId: laboratorio.id,
     detalle: {
       tipo,
       app: app.nombre,

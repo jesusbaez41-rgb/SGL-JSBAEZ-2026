@@ -27,7 +27,8 @@ test('PU-12 matriz de permisos por rol (CA-07)', () => {
 
   assert.equal(hasPermission('DOCENTE', 'audit:read'), false);
   assert.equal(hasPermission('DOCENTE', 'users:manage'), false);
-  assert.equal(hasPermission('ADMIN_TECNICO', 'audit:read'), false);
+  // HU-COM-12: el Admin Tecnico tambien consulta la auditoria.
+  assert.equal(hasPermission('ADMIN_TECNICO', 'audit:read'), true);
   assert.equal(hasPermission('ADMIN_ACADEMICO', 'labs:manage'), false);
 
   assert.deepEqual([...WEB_ROLES].sort(), ['ADMIN_ACADEMICO', 'ADMIN_TECNICO', 'DOCENTE'].sort());

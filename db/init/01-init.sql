@@ -303,12 +303,17 @@ CREATE TABLE auditoria (
     detalle           JSONB,
     ip_origen         VARCHAR(45),
     fecha_evento      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    inmutable         BOOLEAN     NOT NULL DEFAULT TRUE
+    inmutable         BOOLEAN     NOT NULL DEFAULT TRUE,
+    -- HU-COM-12: contexto consultable (CA-02).
+    laboratorio_id    UUID,
+    equipo_id         UUID
 );
 
 CREATE INDEX ix_auditoria_usuario  ON auditoria (usuario_id);
 CREATE INDEX ix_auditoria_entidad  ON auditoria (entidad_afectada, entidad_id);
 CREATE INDEX ix_auditoria_fecha    ON auditoria (fecha_evento DESC);
+CREATE INDEX ix_auditoria_laboratorio ON auditoria (laboratorio_id);
+CREATE INDEX ix_auditoria_equipo      ON auditoria (equipo_id);
 
 -- =====================================================================
 -- 18) TABLA: ARCHIVO_ACADEMICO
@@ -442,6 +447,19 @@ CREATE TRIGGER tg_auditoria_block_delete
     FOR EACH ROW
     EXECUTE FUNCTION trg_auditoria_inmutable();
 
+-- HU-COM-12: TRUNCATE tambien es una modificacion (CA-03/CA-05).
+CREATE OR REPLACE FUNCTION trg_auditoria_no_truncate()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'La tabla AUDITORIA es inmutable: no se permite TRUNCATE (RNF-020).';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_auditoria_block_truncate
+    BEFORE TRUNCATE ON auditoria
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION trg_auditoria_no_truncate();
+
 -- 20.2) Inmutabilidad de EVENTO_AUTENTICACION (HU-COM-14, CA-12)
 CREATE OR REPLACE FUNCTION trg_evento_auth_inmutable()
 RETURNS TRIGGER AS $$
@@ -532,3 +550,35 @@ COMMENT ON TABLE auditoria          IS 'Auditoría inmutable de acciones crític
 COMMENT ON TABLE archivo_academico  IS 'Repositorio académico centralizado (RF-016, HU-COM-11)';
 COMMENT ON TABLE sesion_web         IS 'Sesiones web revocables asociadas al JWT (HU-COM-14, CA-03/10/11)';
 COMMENT ON TABLE evento_autenticacion IS 'Auditoría append-only de login, logout, fallos y accesos denegados (HU-COM-14, CA-12/14)';
+
+-- =====================================================================
+-- HU-COM-12: rol de aplicacion con privilegios minimos
+--
+-- sgl_app no es superusuario ni owner. El backend lo usa para operar;
+-- sobre auditoria y evento_autenticacion solo puede leer e insertar.
+-- El password se configura con scripts/bootstrap-hu12.sh (DB_APP_PASSWORD).
+-- =====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sgl_app') THEN
+        CREATE ROLE sgl_app LOGIN;
+    END IF;
+END
+$$;
+
+DO $$ BEGIN EXECUTE format('GRANT CONNECT ON DATABASE %I TO sgl_app', current_database()); END $$;
+GRANT USAGE ON SCHEMA public TO sgl_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sgl_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO sgl_app;
+
+REVOKE ALL ON auditoria FROM sgl_app;
+GRANT SELECT, INSERT ON auditoria TO sgl_app;
+REVOKE ALL ON evento_autenticacion FROM sgl_app;
+GRANT SELECT, INSERT ON evento_autenticacion TO sgl_app;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE sgl_user IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sgl_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE sgl_user IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO sgl_app;
+
+COMMENT ON ROLE sgl_app IS 'Rol de aplicacion SGL: sin UPDATE/DELETE/TRUNCATE sobre auditoria (HU-COM-12, CA-06)';

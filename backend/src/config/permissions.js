@@ -37,6 +37,8 @@ const ROLE_PERMISSIONS = Object.freeze({
     'deployments:manage',
     'policies:read',
     'policies:manage',
+    // HU-COM-12: consulta del registro de auditoria.
+    'audit:read',
   ]),
   DOCENTE: Object.freeze([
     'dashboard:read',

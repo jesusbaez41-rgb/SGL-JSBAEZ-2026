@@ -560,7 +560,7 @@ test('HU04-14 el job periódico sincroniza con un actor auditable (CA-08)', asyn
   assert.equal(calls.length, 1);
   assert.equal(calls[0].req.user.id, ADMIN_ID);
   assert.equal(calls[0].req.user.rol, 'ADMIN_TECNICO');
-  assert.deepEqual(calls[0].options, {});
+  assert.deepEqual(calls[0].options, { background: true });
   assert.equal(summary.creados, 1);
 });
 

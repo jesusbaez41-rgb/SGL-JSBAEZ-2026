@@ -47,7 +47,7 @@ async function runOnce() {
       return null;
     }
 
-    const summary = await equipmentService.syncFromMesh(req, {});
+    const summary = await equipmentService.syncFromMesh(req, { background: true });
     logger.info('Sincronización MeshCentral completada', {
       total: summary.total,
       creados: summary.creados,

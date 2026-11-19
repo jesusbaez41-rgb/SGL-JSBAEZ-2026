@@ -14,6 +14,7 @@
 | Sesión JWT revocable + inactividad | **Implementada** (HU-COM-14) |
 | RBAC por permisos y redirección por rol | **Implementado** (HU-COM-14) |
 | Auditoría de acceso append-only | **Implementada** (HU-COM-14, CA-12) |
+| Auditoría de acciones administrativas | **Implementada** (HU-COM-12: consulta, filtros, inmutabilidad y rol de app) |
 | CRUD de usuarios sincronizado con Samba AD | **Implementado** (HU-COM-02) |
 | Autenticación de PC cliente Windows (Kerberos) | **Parcial** (KDC/DNS listos; `sgl-win` en NAT, sin unir) |
 | GPO y perfil por rol | **Pendiente** (sin OUs/GPOs SGL) |
@@ -302,7 +303,7 @@ El detalle está en `specs/hu-08.md`.
 |---|---|---|---|
 | CA-01 | Restricción por defecto (RN-008) | ✓ | `permiso_app_grupo.habilitado DEFAULT FALSE`; ausencia = `false` en la matriz |
 | CA-02 | Unión de permisos (RN-013) | ✓ | `policies.service.efectivos` (unión por laboratorio) |
-| CA-03 | Bloqueo efectivo (RN-009) | ✓ | Política AppLocker `EnforcementMode="Enabled"` con reglas `Allow` por SID |
+| CA-03 | Bloqueo efectivo (RN-009) | ✓ | Política AppLocker `EnforcementMode="Enabled"` con reglas `Allow` por SID + publisher de Microsoft, rutas System32/SystemApps/WindowsApps y colección Appx (WindowsApps/SystemApps/ImmersiveControlPanel) |
 | CA-04 | Aplicación de políticas en la PC | ✓ | `Set-AppLockerPolicy -XmlPolicy` + `AppIDSvc` activo |
 | CA-05 | Bloqueo local y registro del intento | ✓ | AppLocker bloquea y registra en su Event Log |
 | CA-06 | Unión de permisos del estudiante | ✓ | `GET /api/policies/users/:id/effective` |
@@ -323,9 +324,16 @@ El detalle está en `specs/hu-08.md`.
   falta, la app se excluye de la política y la interfaz lo avisa.
 - El despliegue usa la misma infraestructura que HU-COM-08 (estado en vivo de
   MeshCentral, despacho por equipo y auditoría).
+- La política incluye una regla `FilePublisherRule` para todo lo firmado por
+  Microsoft, reglas explícitas para `System32`, `SystemApps` y
+  `WindowsApps`, y una colección **Appx** para `WindowsApps`, `SystemApps` e
+  `ImmersiveControlPanel`. Sin la colección Appx, AppLocker bloquea todas
+  las apps empaquetadas (evento 8027) y el menú Inicio deja de responder
+  (ver §15 de `specs/hu-06.md`).
 - Verificado en `sgl-win`: `SrpV2\Exe` con `EnforcementMode=1`, la regla de
-  7-Zip para el SID de `GRP-1A`, y la tarea `SGL-Lockdown` creada con
-  `C:\ProgramData\SGL\SGL-Lockdown.ps1`.
+  7-Zip para el SID de `GRP-1A`, la tarea `SGL-Lockdown` creada con
+  `C:\ProgramData\SGL\SGL-Lockdown.ps1` y cero eventos 8004 tras el
+  redespliegue.
 
 El detalle está en `specs/hu-06.md`.
 ## Leyenda RN
@@ -345,7 +353,7 @@ El detalle está en `specs/hu-06.md`.
 | RN-007 | Cubierta (BD + API) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo`; `apps.service.link` rechaza otra versión activa y permite históricas inactivas | — |
 | RN-008 | Cubierta (BD + API + PC) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo no crea permisos; la política AppLocker usa `EnforcementMode="Enabled"` y deniega por defecto lo no autorizado (HU-COM-06) | — |
 | RN-009 | Cubierta (PC + API) | AppLocker aplica reglas `Allow` por SID de grupo y bloquea el resto; el despliegue y los cambios de permisos se auditan. El Event Log de AppLocker queda disponible en la PC (HU-COM-06) | Mostrar los intentos bloqueados en SGL |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + altas/ediciones de usuario (HU-COM-02) + laboratorios/equipos y sincronizaciones MeshCentral (HU-COM-03/04) + grupos/membresías (HU-COM-05) + catálogo, subidas y vínculos de aplicaciones (HU-COM-07) + despliegues y reintentos (HU-COM-08) + permisos por grupo y despliegue de políticas (HU-COM-06) | Auditar logon de PC en SGL (HU-COM-01) y listas blancas |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + consulta de acciones administrativas en `/api/audit/logs` con filtros y UI (HU-COM-12) + triggers UPDATE/DELETE/TRUNCATE + rol `sgl_app` sin privilegios de modificación + sync automático marcado `origen=SISTEMA` + auditoría de usuarios, laboratorios/equipos, grupos, apps, despliegues y políticas | Auditar logon de PC en SGL (HU-COM-01) y listas blancas (RN-016) |
 | RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
 | RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
 | RN-013 | Cubierta (API) | `GET /api/policies/users/:id/effective` devuelve la unión de apps de todos los grupos activos del estudiante, agrupada por laboratorio (HU-COM-06) | — |
@@ -378,6 +386,29 @@ El detalle está en `specs/hu-06.md`.
 15. **Acceso web tras el cambio de red:** desde el host usar `http://192.168.0.50:8080/`; desde el Win10 en `sgl`, `http://192.168.100.58:8080/`. La IP `192.168.100.58` ya no es alcanzable desde el host porque no está en la red `sgl`.
 16. **HU-COM-07 — verificación de integridad:** el backend calcula el SHA-256 del archivo indicado en `ruta_instalador`; las rutas relativas se resuelven contra `APPS_INSTALLERS_DIR` (`/opt/sgl-instaladores`). El binario debe ser legible por el contenedor `sgl-backend`; no se admiten URLs remotas. El directorio debe ser escribible por el usuario
    del backend porque también es el destino de los instaladores subidos (CA-06).
+
+17. **HU-COM-12 — rol de aplicación:** el backend dejó de usar `sgl_user` (superusuario) y conecta como `sgl_app`, con `SELECT/INSERT/UPDATE/DELETE` en el esquema pero solo `SELECT/INSERT` en `auditoria` y `evento_autenticacion`. `DB_APP_PASSWORD` vive en `.env` (600) y `scripts/bootstrap-hu12.sh` aplica la migración 10 y el password. `sgl_user` queda para migraciones/mantenimiento.
+18. **HU-COM-12 — sincronizaciones:** el job de MeshCentral marca sus eventos con `detalle.origen='SISTEMA'` y no audita corridas sin cambios. La UI oculta las sincronizaciones de inventario por defecto (`excluir_sincronizacion=1`), pero se pueden mostrar desmarcando el filtro.
+19. **HU-COM-12 — instalación limpia:** se corrigió `db/init/01-init.sql` (el `CHECK` de `laboratorio.subred` y el `$$` de la función de truncate, heredados de HU-06) y se validó el init completo en una base temporal `sgl_init_test`, con `sgl_app=ar` sobre `auditoria` y los triggers de UPDATE/DELETE/TRUNCATE. Las columnas de contexto `laboratorio_id`/`equipo_id` no tienen FK para no bloquear el borrado de un laboratorio/equipo con historial.
+
+## HU-COM-12 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Trazabilidad completa (RN-010/RF-019) | ✓ | `recordAuditEvent` en usuarios, grupos, laboratorios, equipos, apps, despliegues y políticas; `GET /api/audit/logs` + UI |
+| CA-02 | Campos de registro (RNF-007) | ✓ | `auditoria.laboratorio_id/equipo_id`, actor, fecha, acción, entidad, IP y detalle |
+| CA-03 | Inmutabilidad desde la interfaz | ✓ | `AuditView.vue` solo lectura; sin acciones de edición/borrado |
+| CA-04 | Registro automático | ✓ | Llamadas a `recordAuditEvent` dentro de cada servicio crítico |
+| CA-05 | Inmutabilidad desde la API | ✓ | Solo `GET /logs` y `GET /events`; triggers de BD para UPDATE/DELETE/TRUNCATE |
+| CA-06 | Almacenamiento seguro | ✓ | Backend conecta como `sgl_app` (sin UPDATE/DELETE/TRUNCATE sobre auditoría); PostgreSQL no expuesto |
+
+**Resumen HU-COM-12:** 6 CA cubiertos · 0 pendientes. Las listas blancas se integrarán cuando se implemente RN-016.
+
+**Decisiones de diseño:**
+- La consulta de auditoría vive en `audit.service.listAuditLogs` con `findAndCountAll`, joins a usuario/laboratorio/equipo y filtros server-side.
+- La inmutabilidad combina tres capas: API de solo lectura, triggers de BD y un rol de aplicación no superusuario.
+- La sincronización periódica de MeshCentral se marca `origen=SISTEMA`, omite corridas sin cambios y la UI la oculta por defecto; la sincronización manual queda como `USUARIO`.
+- `audit:read` se habilita también para el Admin Técnico (HU-COM-12), manteniendo el acceso del Admin Académico.
 
 ## Qué significa "Cubierta (BD)"
 
