@@ -459,6 +459,42 @@ test('HU06-07 genera el XML con la regla y el SID del grupo (CA-07)', async (t) 
   assert.deepEqual(politica.resumen.apps_sin_ruta, ['Sin ruta']);
 });
 
+test('HU06-15 no bloquea componentes esenciales de Windows (CA-03)', async (t) => {
+  const ctx = setup({
+    permisos: [
+      { id: 'p1', vinculo_id: VINCULO_ID, grupo_id: GRUPO_ID, habilitado: true },
+    ],
+  });
+  t.after(() => ctx.restore());
+
+  const xml = (await ctx.service.generar(request(), LAB_ID)).contenido;
+
+  // Regla de publisher: todo lo firmado por Microsoft queda permitido.
+  assert.ok(xml.includes('<FilePublisherRule'));
+  assert.ok(xml.includes('O=MICROSOFT CORPORATION'));
+  // Rutas del shell y de las apps del sistema.
+  assert.ok(xml.includes('C:\\Windows\\System32\\*'));
+  assert.ok(xml.includes('C:\\Windows\\SystemApps\\*'));
+  assert.ok(xml.includes('C:\\Program Files\\WindowsApps\\*'));
+});
+
+test('HU06-16 configura la coleccion Appx para no bloquear el Inicio (CA-03)', async (t) => {
+  const ctx = setup({
+    permisos: [
+      { id: 'p1', vinculo_id: VINCULO_ID, grupo_id: GRUPO_ID, habilitado: true },
+    ],
+  });
+  t.after(() => ctx.restore());
+
+  const xml = (await ctx.service.generar(request(), LAB_ID)).contenido;
+
+  // Sin esta coleccion, AppLocker bloquea Inicio, busqueda y Configuracion (8027).
+  assert.ok(xml.includes('<RuleCollection Type="Appx" EnforcementMode="Enabled">'));
+  assert.ok(xml.includes('C:\\Program Files\\WindowsApps\\*'));
+  assert.ok(xml.includes('C:\\Windows\\SystemApps\\*'));
+  assert.ok(xml.includes('C:\\Windows\\ImmersiveControlPanel\\*'));
+});
+
 test('HU06-08 guarda la politica por grupo (CA-07)', async (t) => {
   const ctx = setup({
     permisos: [

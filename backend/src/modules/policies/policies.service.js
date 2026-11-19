@@ -322,6 +322,26 @@ async function efectivos(usuarioId) {
   };
 }
 
+/**
+ * Regla de publisher: permite todo lo firmado por Microsoft.
+ * Es la que mantiene funcionando Windows (shell, menú Inicio, buscador,
+ * Edge, etc.) sin abrir la puerta a aplicaciones de terceros.
+ */
+function reglaMicrosoft() {
+  const id = guidEstable('microsoft-publisher');
+  return [
+    `    <FilePublisherRule Id="${id}" Name="Microsoft"`,
+    `        Description="Componentes firmados por Microsoft"`,
+    `        UserOrGroupSid="${SID_TODOS}" Action="Allow">`,
+    '      <Conditions>',
+    '        <FilePublisherCondition PublisherName="O=MICROSOFT CORPORATION, L=REDMOND, S=WASHINGTON, C=US" ProductName="*" BinaryName="*">',
+    '          <BinaryVersionRange LowSection="*" HighSection="*" />',
+    '        </FilePublisherCondition>',
+    '      </Conditions>',
+    '    </FilePublisherRule>',
+  ].join('\n');
+}
+
 /** Regla directa (sin grupo de app). */
 function reglaBase(nombre, sid, ruta) {
   const id = guidEstable(`${sid}:${ruta}`);
@@ -338,7 +358,13 @@ function reglaBase(nombre, sid, ruta) {
 
 /** Reglas mínimas para que Windows funcione y el admin quede exento. */
 function reglasBase(bloqueo) {
-  const reglas = [reglaBase('SGL Windows', SID_TODOS, 'C:\\Windows\\*')];
+  const reglas = [
+    reglaMicrosoft(),
+    reglaBase('SGL Windows', SID_TODOS, 'C:\\Windows\\*'),
+    reglaBase('SGL Windows System32', SID_TODOS, 'C:\\Windows\\System32\\*'),
+    reglaBase('SGL Windows SystemApps', SID_TODOS, 'C:\\Windows\\SystemApps\\*'),
+    reglaBase('SGL Windows Apps', SID_TODOS, 'C:\\Program Files\\WindowsApps\\*'),
+  ];
 
   if (bloqueo.exencion_admin) {
     reglas.push(
@@ -436,12 +462,42 @@ function reglaXml(app, grupo) {
   ].join('\n');
 }
 
+/**
+ * Reglas de apps empaquetadas (Appx).
+ *
+ * AppLocker bloquea TODAS las apps de paquete si se aplican reglas Exe y la
+ * colección Appx no está configurada (evento 8027). Eso deja sin menú Inicio,
+ * sin búsqueda y sin Configuración. Estas reglas permiten las apps del
+ * sistema y de la Store.
+ */
+function reglasAppx() {
+  const rutas = [
+    ['appx-windowsapps', 'SGL WindowsApps', 'Apps empaquetadas de la Store', 'C:\\Program Files\\WindowsApps\\*'],
+    ['appx-systemapps', 'SGL SystemApps', 'Apps del sistema (Inicio, busqueda)', 'C:\\Windows\\SystemApps\\*'],
+    ['appx-immersive', 'SGL ImmersiveControlPanel', 'Configuracion de Windows', 'C:\\Windows\\ImmersiveControlPanel\\*'],
+  ];
+  return rutas.map(([clave, nombre, descripcion, ruta]) =>
+    [
+      `    <FilePathRule Id="${guidEstable(clave)}" Name="${nombre}"`,
+      `        Description="${descripcion}"`,
+      `        UserOrGroupSid="${SID_TODOS}" Action="Allow">`,
+      '      <Conditions>',
+      `        <FilePathCondition Path="${escapeXml(ruta)}" />`,
+      '      </Conditions>',
+      '    </FilePathRule>',
+    ].join('\n'),
+  );
+}
+
 function xmlPolitica(reglas) {
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<AppLockerPolicy Version="1">',
     '  <RuleCollection Type="Exe" EnforcementMode="Enabled">',
     ...reglas,
+    '  </RuleCollection>',
+    '  <RuleCollection Type="Appx" EnforcementMode="Enabled">',
+    ...reglasAppx(),
     '  </RuleCollection>',
     '</AppLockerPolicy>',
     '',
@@ -532,19 +588,32 @@ async function generar(req, laboratorioId) {
     .digest('hex')
     .slice(0, 16);
 
+  // El XML también se publica en /instaladores: con la colección Appx
+  // supera el límite de comando de MeshCentral.
+  let xmlFile = null;
+  try {
+    xmlFile = `sgl-politica-${version}.xml`;
+    fs.mkdirSync(installersDir(), { recursive: true });
+    fs.writeFileSync(path.join(installersDir(), xmlFile), contenido, 'utf8');
+  } catch (err) {
+    logger.warn('No se pudo publicar el XML de la política', { error: err.message });
+    xmlFile = null;
+  }
+
   const politica = await PoliticaLaboratorio.create({
     laboratorio_id: datos.laboratorio.id,
     generada_por: req.user.id,
     version,
     contenido,
     resumen,
-    config: { bloqueo: bloqueoConfig, script, script_file: scriptFile },
+    config: { bloqueo: bloqueoConfig, script, script_file: scriptFile, xml_file: xmlFile },
   });
 
   await recordAuditEvent(req, {
     accion: 'EJECUTAR',
     entidad: 'politica',
     entidadId: politica.id,
+    laboratorioId: datos.laboratorio.id,
     detalle: {
       operacion: 'GENERAR',
       laboratorio: datos.laboratorio.nombre,
@@ -665,6 +734,7 @@ async function despachar({ politica, equipo }) {
       xml: datosPolitica.contenido,
       nombre: datosPolitica.version,
       scriptFile: datosPolitica.config ? datosPolitica.config.script_file : null,
+      xmlFile: datosPolitica.config ? datosPolitica.config.xml_file : null,
     });
 
     if (resultado.equipoApagado) {

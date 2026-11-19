@@ -531,18 +531,24 @@ async function deployToDevice(payload) {
  * Aplica una política AppLocker en el equipo (HU-COM-06).
  * Guarda el XML, habilita el servicio AppIDSvc y aplica la política local.
  */
-async function aplicarPolitica(nodeid, xml, nombre, scriptFile) {
+async function aplicarPolitica(nodeid, xml, nombre, scriptFile, xmlFile) {
   const base64 = Buffer.from(String(xml || ''), 'utf8').toString('base64');
   const destino = `${REMOTE_TEMP_DIR}\\sgl-politica-${nombre || 'actual'}.xml`;
 
   const urlScript = scriptFile
     ? `${INSTALADORES_URL.replace(/\/$/, '')}/${encodeURIComponent(scriptFile)}`
     : null;
+  const urlXml = xmlFile
+    ? `${INSTALADORES_URL.replace(/\/$/, '')}/${encodeURIComponent(xmlFile)}`
+    : null;
 
   const comando = [
     "$ErrorActionPreference='Stop'",
-    `$xml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64}'))`,
-    `Set-Content -Path '${destino}' -Value $xml -Encoding UTF8`,
+    urlXml
+      ? `Invoke-WebRequest -Uri '${urlXml}' -OutFile '${destino}' -UseBasicParsing`
+      : `$xml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64}'))`,
+    urlXml ? null : `Set-Content -Path '${destino}' -Value $xml -Encoding UTF8`,
+    urlXml ? null : null,
     urlScript ? "New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null" : null,
     urlScript ? `Invoke-WebRequest -Uri '${urlScript}' -OutFile 'C:\\ProgramData\\SGL\\SGL-Lockdown.ps1' -UseBasicParsing` : null,
     urlScript ? "$accion = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\ProgramData\\SGL\\SGL-Lockdown.ps1'" : null,
@@ -743,7 +749,13 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const nodeid = String(body.nodeid || '').trim();
       if (!nodeid) throw new Error('Falta el identificador del equipo (nodeid)');
-      const salida = await aplicarPolitica(nodeid, body.xml, body.nombre, body.script_file);
+      const salida = await aplicarPolitica(
+        nodeid,
+        body.xml,
+        body.nombre,
+        body.script_file,
+        body.xml_file,
+      );
 
       if (equipoSinConexion(salida)) {
         sendJson(res, 200, { ok: false, error: 'EQUIPO_APAGADO', salida: String(salida || '').trim() });

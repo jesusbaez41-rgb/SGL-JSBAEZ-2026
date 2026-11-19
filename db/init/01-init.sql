@@ -98,9 +98,8 @@ CREATE TABLE laboratorio (
     subred      VARCHAR(64)  NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT uq_laboratorio_nombre UNIQUE (nombre),
-    CONSTRAINT ck_laboratorio_subred CHECK (subred ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}
-)
-    bloqueo              JSONB,                      -- HU-COM-06: config de bloqueo
+    CONSTRAINT ck_laboratorio_subred CHECK (subred ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$'),
+    bloqueo              JSONB                       -- HU-COM-06: config de bloqueo
 );
 
 -- =====================================================================

@@ -240,7 +240,7 @@ async function resultado({ nodeid, resultadoId }) {
 /**
  * Aplica una política AppLocker en el equipo (HU-COM-06, CA-08).
  */
-async function aplicarPolitica({ nodeid, xml, nombre, scriptFile }) {
+async function aplicarPolitica({ nodeid, xml, nombre, scriptFile, xmlFile }) {
   if (!isConfigured()) {
     throw httpError(503, 'La integración con MeshCentral no está configurada.', 'MESH_NO_CONFIGURADO');
   }
@@ -250,7 +250,13 @@ async function aplicarPolitica({ nodeid, xml, nombre, scriptFile }) {
     response = await fetch(`${baseUrl()}/politica`, {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ nodeid, xml, nombre, script_file: scriptFile || null }),
+      body: JSON.stringify({
+        nodeid,
+        xml,
+        nombre,
+        script_file: scriptFile || null,
+        xml_file: xmlFile || null,
+      }),
       signal: AbortSignal.timeout(Number(env.meshApiTimeoutMs || 15000) * 4),
     });
   } catch (err) {
