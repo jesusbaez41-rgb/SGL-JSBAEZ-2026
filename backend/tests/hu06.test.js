@@ -289,6 +289,11 @@ function setup(options = {}) {
       if (options.meshDeployError) throw options.meshDeployError;
       return { ok: true, codigo: 0, salida: 'SGL_EXITCODE=0' };
     },
+    aplicarApps: async (payload) => {
+      meshCalls.push(payload);
+      if (options.meshDeployError) throw options.meshDeployError;
+      return { ok: true, codigo: 0, salida: 'SGL_EXITCODE=0' };
+    },
   };
 
   mocker.mock('../../models', {
@@ -478,7 +483,7 @@ test('HU06-15 no bloquea componentes esenciales de Windows (CA-03)', async (t) =
   assert.ok(xml.includes('C:\\Program Files\\WindowsApps\\*'));
 });
 
-test('HU06-16 configura la coleccion Appx para no bloquear el Inicio (CA-03)', async (t) => {
+test('HU06-16 coleccion Appx: publisher de Microsoft en auditoria para no bloquear el Inicio (CA-03)', async (t) => {
   const ctx = setup({
     permisos: [
       { id: 'p1', vinculo_id: VINCULO_ID, grupo_id: GRUPO_ID, habilitado: true },
@@ -488,11 +493,77 @@ test('HU06-16 configura la coleccion Appx para no bloquear el Inicio (CA-03)', a
 
   const xml = (await ctx.service.generar(request(), LAB_ID)).contenido;
 
-  // Sin esta coleccion, AppLocker bloquea Inicio, busqueda y Configuracion (8027).
-  assert.ok(xml.includes('<RuleCollection Type="Appx" EnforcementMode="Enabled">'));
-  assert.ok(xml.includes('C:\\Program Files\\WindowsApps\\*'));
-  assert.ok(xml.includes('C:\\Windows\\SystemApps\\*'));
-  assert.ok(xml.includes('C:\\Windows\\ImmersiveControlPanel\\*'));
+  // AppLocker solo admite publisher rules en Appx; una FilePathRule invalida
+  // la colección y deja sin Inicio, busqueda y Configuracion.
+  assert.ok(xml.includes('<RuleCollection Type="Appx" EnforcementMode="AuditOnly">'));
+  assert.ok(
+    xml.includes(
+      'PublisherName="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"',
+    ),
+  );
+  assert.ok(
+    xml.includes(
+      'PublisherName="CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"',
+    ),
+  );
+
+  const appx = xml.slice(xml.indexOf('Type="Appx"'));
+  assert.ok(!appx.includes('<FilePathRule'), 'Appx no admite FilePathRule');
+  assert.ok(!appx.includes('C:\\Windows\\SystemApps\\*'));
+});
+
+test('HU06-17 script de apps: ACL por SID de grupo sin tocar Windows (CA-03)', async (t) => {
+  const ctx = setup({
+    permisos: [
+      { id: 'p1', vinculo_id: VINCULO_ID, grupo_id: GRUPO_ID, habilitado: true },
+    ],
+  });
+  t.after(() => ctx.restore());
+
+  const script = ctx.service.construirScriptApps({
+    grupos: [{ id: GRUPO_ID, codigo: 'GRP-1A', samba_sid: SID_1A }],
+    apps: [
+      {
+        id: APP_ID,
+        nombre: '7-Zip',
+        ruta_ejecutable: 'C:\\Program Files\\7-Zip\\7zFM.exe',
+        permisos: { [GRUPO_ID]: true },
+      },
+      {
+        id: APP2_ID,
+        nombre: 'Audacity',
+        ruta_ejecutable: 'C:\\Program Files\\Audacity\\Audacity.exe',
+        permisos: {},
+      },
+    ],
+  });
+
+  // El bloqueo es una ACL deny (X) sobre la carpeta de la app no habilitada.
+  assert.match(script, /icacls \$ruta \/deny/);
+  assert.match(script, /':\(X\)'/);  assert.match(script, /'C:\\Program Files\\Audacity'/);
+  assert.match(script, new RegExp(SID_1A));
+  // La app habilitada se libera y Windows no se toca.
+  assert.match(script, /icacls \$ruta \/remove:d/);
+  assert.match(script, /'\*' \+ \$r\.sid/);
+  assert.doesNotMatch(script, /C:\\Windows/);
+  assert.doesNotMatch(script, /NoControlPanel|NoDrives|DisableTaskMgr|Set-AppLockerPolicy/);
+  // Las apps sin permisos para el grupo nunca quedan "permitidas".
+  assert.doesNotMatch(script, /permitidas = @\('C:\\Program Files\\Audacity'\)/);
+  // PowerShell no admite coma final antes del cierre del arreglo.
+  assert.doesNotMatch(script, /},\r?\n\)/);
+});
+
+test('HU06-18 carpetaApp descarta rutas peligrosas', async (t) => {
+  const ctx = setup();
+  t.after(() => ctx.restore());
+
+  assert.equal(ctx.service.carpetaApp('C:\\Program Files\\App\\app.exe'), 'C:\\Program Files\\App');
+  assert.equal(ctx.service.carpetaApp('C:\\Windows\\System32\\cmd.exe'), null);
+  assert.equal(ctx.service.carpetaApp('C:\\Program Files\\WindowsApps\\App\\app.exe'), null);
+  assert.equal(ctx.service.carpetaApp('C:\\Program Files\\Common Files\\App\\app.exe'), null);
+  assert.equal(ctx.service.carpetaApp('C:\\Program Files\\app.exe'), null);
+  assert.equal(ctx.service.carpetaApp('app.exe'), null);
+  assert.equal(ctx.service.carpetaApp(''), null);
 });
 
 test('HU06-08 guarda la politica por grupo (CA-07)', async (t) => {

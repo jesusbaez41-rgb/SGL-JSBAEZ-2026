@@ -77,6 +77,20 @@ services:
     networks:
       - sgl-net
 
+  squid:
+    # HU-COM-09 / RN-016: proxy de filtrado en contenedor.
+    # Usa la red del host para ver la IP real de cada PC; las ACL del
+    # squid.conf son por IP de origen y detrás del NAT de Docker no servirían.
+    image: ubuntu/squid:latest
+    container_name: sgl-squid
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      # El backend publica el squid.conf generado en este directorio.
+      - ${APPS_INSTALLERS_DIR:-/opt/sgl-instaladores}:/sgl:ro
+      # Configuración viva: solo se reemplaza después de validarla.
+      - ./squid/squid.conf:/etc/squid/squid.conf:ro
+
 volumes:
   pgdata:
   uploads:

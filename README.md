@@ -106,6 +106,14 @@ sgl-web/
 | `PATCH` | `/api/equipment/:id` | `equipment:manage` |
 | `POST` | `/api/equipment/sync` | `equipment:manage` |
 | `POST` | `/api/equipment/:id/refresh` | `equipment:manage` |
+| `GET` | `/api/whitelists` | `whitelists:read` |
+| `POST` | `/api/whitelists` | `whitelists:manage` |
+| `PATCH` | `/api/whitelists/:id` | `whitelists:manage` |
+| `DELETE` | `/api/whitelists/:id` | `whitelists:manage` |
+| `POST` | `/api/whitelists/generate` | `whitelists:manage` |
+| `POST` | `/api/whitelists/generated/:id/deploy` | `whitelists:manage` |
+| `POST` | `/api/whitelists/sync` | `whitelists:manage` |
+| `POST` | `/api/navigation/session` | `x-agent-key` (agente de la PC) |
 
 ## Comandos útiles
 
@@ -121,8 +129,9 @@ docker compose up -d --build
 
 Las reglas RN-001 a RN-020 son normativas y obligatorias. Ver
 `specs/business-rules.md`, el estado en `specs/compliance.md`, la HU de
-autenticación web en `specs/hu-14.md`, la de cuentas en `specs/hu-02.md` y la
-de autenticación web + PC cliente en `specs/hu-01.md`.
+autenticación web en `specs/hu-14.md`, la de cuentas en `specs/hu-02.md`, la
+de autenticación web + PC cliente en `specs/hu-01.md` y la de filtrado de
+navegación en `specs/hu-09.md`.
 
 ## Autenticación de PC cliente (HU-COM-01)
 
@@ -160,3 +169,24 @@ La instalación y el bridge están documentados en `docs/meshcentral.md`.
 La instalación del agente Windows como servicio para todos los usuarios está en
 `docs/agent-windows.md`. El instalador ya generado se descarga desde
 `/mesh/instalador` (`meshagent64-SGL-Lab.exe`, 3.4 MB).
+
+## Filtrado de navegación (HU-COM-09)
+
+Cada grupo tiene su lista blanca de dominios (RN-016). Un estudiante navega
+solo por la **unión** de las listas de sus grupos; sin grupo no accede a
+Internet, solo a recursos internos. La configuración se gestiona desde
+**Listas blancas**.
+
+- El servidor ejecuta **Squid** en `192.168.100.58:3128`. El backend publica
+  `/opt/sgl-instaladores/sgl-squid.conf` y `sgl-squid-sync.timer` lo valida
+  (`squid -k parse`) y recarga cada 10 s.
+- La PC aplica el firewall como SYSTEM por SID de grupo y bloquea la salida
+  directa (TCP 80/443/8080/8443, UDP 443, DNS 53 externo y puertos VPN).
+  El SID de administradores (`S-1-5-32-544`) queda exento.
+- Al iniciar sesión, `sgl-navegacion.ps1` registra hostname/SID/IP en
+  `POST /api/navigation/session` y configura el proxy del navegador.
+- Instalación y operación: `sudo ./scripts/install-squid-hu09.sh`.
+
+Variables nuevas en `.env`: `NAV_PROXY_HOST`, `NAV_PROXY_PORT`,
+`NAV_API_BASE`, `NAV_AGENT_KEY` y `NAV_SESSION_HOURS`. Detalle en
+`specs/hu-09.md`.

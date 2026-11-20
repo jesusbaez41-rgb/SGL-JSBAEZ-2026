@@ -17,6 +17,9 @@ router.get('/health', async (req, res) => {
 // Auth contiene su propio login público y protege me/logout/heartbeat.
 router.use('/auth', require('../modules/auth/auth.routes'));
 
+// HU-COM-09: el agente de la PC se autentica con x-agent-key, no con JWT.
+router.use('/navigation', require('../modules/whitelists/whitelists.agent.routes'));
+
 // CA-13: el resto de endpoints exige JWT válido y sesión activa.
 router.use('/users', authMiddleware, require('../modules/users/users.routes'));
 router.use('/groups', authMiddleware, require('../modules/groups/groups.routes'));
@@ -28,5 +31,6 @@ router.use('/equipment', authMiddleware, require('../modules/equipment/equipment
 router.use('/apps', authMiddleware, require('../modules/apps/apps.routes'));
 router.use('/deployments', authMiddleware, require('../modules/deployments/deployments.routes'));
 router.use('/policies', authMiddleware, require('../modules/policies/policies.routes'));
+router.use('/whitelists', authMiddleware, require('../modules/whitelists/whitelists.routes'));
 
 module.exports = router;

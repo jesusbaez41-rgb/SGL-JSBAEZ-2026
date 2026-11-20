@@ -1,0 +1,10 @@
+[Unit]
+Description=SGL - aplica cambios de filtrado de navegacion cada 10s (HU-COM-09)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=10s
+Unit=sgl-squid-sync.service
+
+[Install]
+WantedBy=timers.target

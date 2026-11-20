@@ -1,0 +1,8 @@
+[Unit]
+Description=SGL - sincroniza el squid.conf del contenedor sgl-squid (HU-COM-09)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sgl-web/scripts/squid-sync.sh

@@ -132,7 +132,10 @@ CREATE TABLE sesion_activa (
     equipo_id   UUID NOT NULL REFERENCES equipo(id)  ON DELETE CASCADE,
     hora_inicio TIMESTAMPTZ NOT NULL DEFAULT now(),
     hora_fin    TIMESTAMPTZ,
-    activa      BOOLEAN     NOT NULL DEFAULT TRUE
+    activa      BOOLEAN     NOT NULL DEFAULT TRUE,
+    -- HU-COM-09: IP y grupos aplicados por el filtrado de navegación.
+    ip_origen   VARCHAR(45),
+    grupos      JSONB
 );
 
 CREATE INDEX ix_sesion_usuario ON sesion_activa (usuario_id);
@@ -229,7 +232,10 @@ CREATE TABLE lista_blanca_url (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     grupo_id    UUID NOT NULL REFERENCES grupo(id) ON DELETE CASCADE,
     url         VARCHAR(512) NOT NULL,
+    descripcion VARCHAR(255),                              -- HU-COM-09
+    creado_por  UUID REFERENCES usuario(id) ON DELETE SET NULL, -- HU-COM-09
     fecha_alta  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),       -- HU-COM-09
     activa      BOOLEAN      NOT NULL DEFAULT TRUE,
     CONSTRAINT uq_lista_blanca_grupo_url UNIQUE (grupo_id, url)
 );
@@ -288,6 +294,35 @@ CREATE TABLE config_filtrado (
     version             VARCHAR(32) NOT NULL,
     fecha_generacion    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_config_grupo_lab UNIQUE (grupo_id, laboratorio_id)
+);
+
+-- HU-COM-09: configuración de navegación combinada del laboratorio (CA-07)
+-- y estado de su despliegue por equipo (CA-08).
+CREATE TABLE navegacion_laboratorio (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    laboratorio_id   UUID NOT NULL REFERENCES laboratorio(id) ON DELETE CASCADE,
+    generada_por     UUID NOT NULL REFERENCES usuario(id)     ON DELETE RESTRICT,
+    version          VARCHAR(64) NOT NULL,
+    config_squid     TEXT NOT NULL,
+    config_pac       TEXT,
+    script_pc        TEXT NOT NULL,
+    resumen          JSONB,
+    fecha_generacion TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_navegacion_lab ON navegacion_laboratorio (laboratorio_id, fecha_generacion DESC);
+
+CREATE TABLE navegacion_despliegue (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    navegacion_id UUID NOT NULL REFERENCES navegacion_laboratorio(id) ON DELETE CASCADE,
+    equipo_id     UUID NOT NULL REFERENCES equipo(id) ON DELETE CASCADE,
+    estado        VARCHAR(16) NOT NULL DEFAULT 'PENDIENTE'
+                  CHECK (estado IN ('PENDIENTE','EN_PROCESO','COMPLETADO','FALLIDO')),
+    mensaje_error VARCHAR(512),
+    salida        TEXT,
+    intentos      INTEGER NOT NULL DEFAULT 0,
+    fecha_reporte TIMESTAMPTZ,
+    CONSTRAINT uq_navegacion_equipo UNIQUE (navegacion_id, equipo_id)
 );
 
 -- =====================================================================

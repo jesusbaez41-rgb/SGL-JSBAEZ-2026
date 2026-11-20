@@ -396,59 +396,103 @@ function reglasProgramacion(bloqueo, grupos) {
   return reglas;
 }
 
+/** Carpetas que nunca se tocan: componentes de Windows y apps empaquetadas. */
+const CARPETAS_PROTEGIDAS = Object.freeze([
+  /^[a-z]:\\windows(\\|$)/i,
+  /\\windowsapps(\\|$)/i,
+  /^[a-z]:\\program files(?: \(x86\))?\\common files(\\|$)/i,
+  /^[a-z]:\\program files(?: \(x86\))?\\windows nt(\\|$)/i,
+]);
+
+/** Carpeta de una aplicación a partir de la ruta de su ejecutable. */
+function carpetaApp(ruta) {
+  const limpia = String(ruta || '').trim().replace(/\*+$/, '');
+  if (!/^[a-z]:\\/i.test(limpia)) return null;
+  const dir = path.win32.dirname(limpia).replace(/\\+$/, '');
+  const partes = dir.split('\\').filter(Boolean);
+  // Solo carpetas de aplicaciones (C:\Program Files\App); nunca Windows ni
+  // componentes del sistema (Explorador, búsqueda, apps empaquetadas).
+  if (partes.length < 3) return null;
+  if (CARPETAS_PROTEGIDAS.some((patron) => patron.test(dir))) return null;
+  return dir;
+}
+
 /**
- * Script que se ejecuta al iniciar sesión del estudiante (HKCU).
- * Solo aplica a usuarios de los grupos SGL y nunca al administrador.
+ * Script de permisos de ejecución por grupo (HU-COM-06, CA-03).
+ *
+ * Windows 10 Pro no incluye AppLocker (no existe AppIDSvc), así que el
+ * bloqueo se aplica con ACLs de NTFS: `deny (X)` sobre la carpeta de cada
+ * aplicación que el grupo NO tiene habilitada. Todo lo instalado que sí está
+ * permitido (y Windows) sigue funcionando, y el administrador queda exento
+ * porque las ACE se crean solo para los SID de los grupos.
  */
-function construirScript(bloqueo, grupos) {
-  const sids = grupos.map((g) => `'${g.samba_sid}'`).join(', ');
-  const r = bloqueo.restricciones;
-  const claves = [];
+function construirScriptApps(datos) {
+  const reglas = [];
+  for (const grupo of datos.grupos) {
+    if (!/^S-1-5-[\d-]+$/.test(String(grupo.samba_sid || ''))) continue;
 
-  if (r.taskmgr) claves.push("Set-ItemProperty $sys -Name DisableTaskMgr -Value 1 -Type DWord");
-  if (r.registry) claves.push("Set-ItemProperty $sys -Name DisableRegistryTools -Value 1 -Type DWord");
-  if (r.cmd) claves.push("Set-ItemProperty $sys -Name DisableCMD -Value 1 -Type DWord");
-  if (r.control_panel) claves.push("Set-ItemProperty $exp -Name NoControlPanel -Value 1 -Type DWord");
-  if (r.run) claves.push("Set-ItemProperty $exp -Name NoRun -Value 1 -Type DWord");
-  if (r.drives) {
-    claves.push("Set-ItemProperty $exp -Name NoDrives -Value 0x03FFFFFF -Type DWord");
-    claves.push("Set-ItemProperty $exp -Name NoViewOnDrive -Value 0x03FFFFFF -Type DWord");
-  }
-  if (r.context_menu) {
-    claves.push("Set-ItemProperty $exp -Name NoViewContextMenu -Value 1 -Type DWord");
-    claves.push("Set-ItemProperty $exp -Name NoTrayContextMenu -Value 1 -Type DWord");
-    claves.push("Set-ItemProperty $exp -Name NoFileMenu -Value 1 -Type DWord");
-  }
-  if (r.shutdown) {
-    // No apagar, reiniciar ni cerrar sesion desde el menu de inicio.
-    claves.push("Set-ItemProperty $exp -Name NoClose -Value 1 -Type DWord");
+    const permitidas = [];
+    const bloqueadas = [];
+    for (const app of datos.apps) {
+      const carpeta = carpetaApp(app.ruta_ejecutable);
+      if (!carpeta) continue;
+      if (app.permisos[grupo.id]) permitidas.push(carpeta);
+      else bloqueadas.push(carpeta);
+    }
+
+    const permitidasUnicas = [...new Set(permitidas)];
+    const bloqueadasUnicas = [...new Set(bloqueadas)].filter((carpeta) => {
+      const baja = carpeta.toLowerCase();
+      return !permitidasUnicas.some((permitida) => {
+        const p = permitida.toLowerCase();
+        return p === baja || p.startsWith(`${baja}\\`);
+      });
+    });
+
+    if (!bloqueadasUnicas.length && !permitidasUnicas.length) continue;
+    reglas.push({ sid: grupo.samba_sid, permitidas: permitidasUnicas, bloqueadas: bloqueadasUnicas });
   }
 
-  return [
-    "$ErrorActionPreference = 'SilentlyContinue'",
-    "$log = 'C:\\ProgramData\\SGL\\lockdown.log'",
-    "New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null",
-    "function Log($m) { Add-Content -Path $log -Value ((Get-Date -Format o) + ' ' + $m) }",
-    `$gruposSgl = @(${sids})`,
-    "$identidad = [System.Security.Principal.WindowsIdentity]::GetCurrent()",
-    "$misGrupos = @($identidad.Groups | ForEach-Object { $_.Value })",
-    "if ($misGrupos -contains 'S-1-5-32-544') { Log 'admin: sin bloqueo'; exit 0 }",
-    "$esSgl = $false",
-    "foreach ($sid in $gruposSgl) { if ($misGrupos -contains $sid) { $esSgl = $true } }",
-    "if (-not $esSgl) { Log 'usuario fuera de los grupos SGL: sin bloqueo'; exit 0 }",
-    "$sys = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System'",
-    "$exp = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer'",
-    "New-Item -Force $sys | Out-Null",
-    "New-Item -Force $exp | Out-Null",
-    // Si una restriccion esta desactivada, se limpia la clave anterior.
-    "if (-not " + (r.cmd ? '$true' : '$false') + ") { Remove-ItemProperty $sys -Name DisableCMD -ErrorAction SilentlyContinue }",
-    "if (-not " + (r.shutdown ? '$true' : '$false') + ") { Remove-ItemProperty $exp -Name NoClose -ErrorAction SilentlyContinue }",
-
-    ...claves,
-    "Log ('bloqueo aplicado a ' + $identidad.Name)",
-    'exit 0',
-    '',
-  ].join('\r\n');
+  const lineas = [];
+  lineas.push('# SGL - Permisos de ejecucion de aplicaciones (HU-COM-06). Generado automaticamente.');
+  lineas.push("$ErrorActionPreference = 'SilentlyContinue'");
+  lineas.push("$log = 'C:\\ProgramData\\SGL\\apps.log'");
+  lineas.push("New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null");
+  lineas.push("function Log($m) { Add-Content -Path $log -Value ((Get-Date -Format o) + ' ' + $m) }");
+  lineas.push('$reglas = @(');
+  const filasReglas = [];
+  for (const regla of reglas) {
+    const lista = (rutas) => (rutas.length ? rutas.map((r) => `'${r.replace(/'/g, "''")}'`).join(', ') : '');
+    filasReglas.push(
+      `  @{ sid = '${regla.sid}'; permitidas = @(${lista(regla.permitidas)}); bloqueadas = @(${lista(
+        regla.bloqueadas,
+      )}) }`,
+    );
+  }
+  // PowerShell no admite una coma final antes del paréntesis de cierre.
+  if (filasReglas.length) lineas.push(filasReglas.join(',\r\n'));
+  lineas.push(')');
+  lineas.push('$bloqueos = 0');
+  lineas.push('$fallos = 0');
+  lineas.push('foreach ($r in $reglas) {');
+  lineas.push('  foreach ($ruta in $r.bloqueadas) {');
+  lineas.push('    if (Test-Path -LiteralPath $ruta) {');
+  lineas.push("      icacls $ruta /deny ('*' + $r.sid + ':(X)') /T /C /Q | Out-Null");
+  lineas.push('      if ($LASTEXITCODE -eq 0) { $bloqueos++ } else {');
+  lineas.push("        $fallos++; Log ('no se pudo bloquear ' + $ruta + ' para ' + $r.sid)");
+  lineas.push('      }');
+  lineas.push('    }');
+  lineas.push('  }');
+  lineas.push('  foreach ($ruta in $r.permitidas) {');
+  lineas.push('    if (Test-Path -LiteralPath $ruta) {');
+  lineas.push("      icacls $ruta /remove:d ('*' + $r.sid) /T /C /Q | Out-Null");
+  lineas.push('    }');
+  lineas.push('  }');
+  lineas.push('}');
+  lineas.push("Log ('permisos de apps aplicados: ' + $bloqueos + ' bloqueo(s), ' + $fallos + ' fallo(s)')");
+  lineas.push('exit 0');
+  lineas.push('');
+  return lineas.join('\r\n');
 }
 
 function reglaXml(app, grupo) {
@@ -467,28 +511,39 @@ function reglaXml(app, grupo) {
 /**
  * Reglas de apps empaquetadas (Appx).
  *
- * AppLocker bloquea TODAS las apps de paquete si se aplican reglas Exe y la
- * colección Appx no está configurada (evento 8027). Eso deja sin menú Inicio,
- * sin búsqueda y sin Configuración. Estas reglas permiten las apps del
- * sistema y de la Store.
+ * AppLocker solo admite reglas de publisher en la colección Appx: una
+ * FilePathRule es inválida ahí y el resultado es que se bloquean TODAS las
+ * apps de paquete (Inicio, búsqueda, Configuración). Además la colección va
+ * en modo auditoría para que un cambio de publisher nunca deje Windows a
+ * medias; el bloqueo real de programas lo hace la colección Exe.
  */
+function reglaAppxPublisher(clave, nombre, publisher) {
+  return [
+    `    <FilePublisherRule Id="${guidEstable(clave)}" Name="${nombre}"`,
+    `        Description="Apps empaquetadas firmadas por ${escapeXml(nombre)}"`,
+    `        UserOrGroupSid="${SID_TODOS}" Action="Allow">`,
+    '      <Conditions>',
+    `        <FilePublisherCondition PublisherName="${escapeXml(publisher)}" ProductName="*" BinaryName="*">`,
+    '          <BinaryVersionRange LowSection="*" HighSection="*" />',
+    '        </FilePublisherCondition>',
+    '      </Conditions>',
+    '    </FilePublisherRule>',
+  ].join('\n');
+}
+
 function reglasAppx() {
-  const rutas = [
-    ['appx-windowsapps', 'SGL WindowsApps', 'Apps empaquetadas de la Store', 'C:\\Program Files\\WindowsApps\\*'],
-    ['appx-systemapps', 'SGL SystemApps', 'Apps del sistema (Inicio, busqueda)', 'C:\\Windows\\SystemApps\\*'],
-    ['appx-immersive', 'SGL ImmersiveControlPanel', 'Configuracion de Windows', 'C:\\Windows\\ImmersiveControlPanel\\*'],
+  return [
+    reglaAppxPublisher(
+      'appx-microsoft',
+      'Microsoft Corporation',
+      'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US',
+    ),
+    reglaAppxPublisher(
+      'appx-microsoft-windows',
+      'Microsoft Windows',
+      'CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US',
+    ),
   ];
-  return rutas.map(([clave, nombre, descripcion, ruta]) =>
-    [
-      `    <FilePathRule Id="${guidEstable(clave)}" Name="${nombre}"`,
-      `        Description="${descripcion}"`,
-      `        UserOrGroupSid="${SID_TODOS}" Action="Allow">`,
-      '      <Conditions>',
-      `        <FilePathCondition Path="${escapeXml(ruta)}" />`,
-      '      </Conditions>',
-      '    </FilePathRule>',
-    ].join('\n'),
-  );
 }
 
 function xmlPolitica(reglas) {
@@ -498,7 +553,7 @@ function xmlPolitica(reglas) {
     '  <RuleCollection Type="Exe" EnforcementMode="Enabled">',
     ...reglas,
     '  </RuleCollection>',
-    '  <RuleCollection Type="Appx" EnforcementMode="Enabled">',
+    '  <RuleCollection Type="Appx" EnforcementMode="AuditOnly">',
     ...reglasAppx(),
     '  </RuleCollection>',
     '</AppLockerPolicy>',
@@ -568,25 +623,23 @@ async function generar(req, laboratorioId) {
     ...new Set(datos.apps.filter((a) => a.ruta_ejecutable).map((a) => a.nombre)),
   ];
 
-  const script = bloqueoConfig.activo ? construirScript(bloqueoConfig, datos.grupos) : null;
-
-  // El script se publica en /instaladores para que la PC lo descargue con un
-  // comando corto (el comando completo supera el límite de MeshCentral).
-  let scriptFile = null;
-  if (script) {
-    scriptFile = `sgl-lockdown-${Date.now()}.ps1`;
-    try {
-      fs.mkdirSync(installersDir(), { recursive: true });
-      fs.writeFileSync(path.join(installersDir(), scriptFile), script, 'utf8');
-    } catch (err) {
-      logger.warn('No se pudo publicar el script de bloqueo', { error: err.message });
-      scriptFile = null;
-    }
+  // HU-COM-06: el bloqueo real se aplica con permisos de ejecución (ACL) por
+  // SID de grupo. El XML de AppLocker se conserva como registro, pero Windows
+  // 10 Pro no lo aplica (no tiene AppIDSvc).
+  const appsScript = construirScriptApps(datos);
+  const appsVersion = crypto.createHash('sha256').update(appsScript).digest('hex').slice(0, 16);
+  const appsFile = 'sgl-apps.ps1';
+  try {
+    fs.mkdirSync(installersDir(), { recursive: true });
+    fs.writeFileSync(path.join(installersDir(), appsFile), appsScript, 'utf8');
+    fs.writeFileSync(path.join(installersDir(), `sgl-apps-${appsVersion}.ps1`), appsScript, 'utf8');
+  } catch (err) {
+    logger.warn('No se pudo publicar el script de permisos de apps', { error: err.message });
   }
   const contenido = xmlPolitica(reglasLab);
   const version = crypto
     .createHash('sha256')
-    .update(contenido + (script || ''))
+    .update(contenido + appsScript)
     .digest('hex')
     .slice(0, 16);
 
@@ -608,7 +661,13 @@ async function generar(req, laboratorioId) {
     version,
     contenido,
     resumen,
-    config: { bloqueo: bloqueoConfig, script, script_file: scriptFile, xml_file: xmlFile },
+    config: {
+      bloqueo: bloqueoConfig,
+      apps_script: appsScript,
+      apps_file: appsFile,
+      apps_version: appsVersion,
+      xml_file: xmlFile,
+    },
   });
 
   await recordAuditEvent(req, {
@@ -731,12 +790,11 @@ async function despachar({ politica, equipo }) {
 
   try {
     const datosPolitica = toPlain(politica);
-    const resultado = await mesh.aplicarPolitica({
+    const config = datosPolitica.config || {};
+    const resultado = await mesh.aplicarApps({
       nodeid: equipo.mesh_agent_id,
-      xml: datosPolitica.contenido,
-      nombre: datosPolitica.version,
-      scriptFile: datosPolitica.config ? datosPolitica.config.script_file : null,
-      xmlFile: datosPolitica.config ? datosPolitica.config.xml_file : null,
+      scriptFile: config.apps_file || 'sgl-apps.ps1',
+      version: config.apps_version || datosPolitica.version,
     });
 
     if (resultado.equipoApagado) {
@@ -825,4 +883,6 @@ module.exports = {
   escapeXml,
   guidEstable,
   xmlPolitica,
+  construirScriptApps,
+  carpetaApp,
 };

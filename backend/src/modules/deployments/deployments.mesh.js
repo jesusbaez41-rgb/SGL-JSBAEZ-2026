@@ -285,6 +285,48 @@ async function aplicarPolitica({ nodeid, xml, nombre, scriptFile, xmlFile }) {
 }
 
 /**
+ * Aplica la configuración de navegación en el equipo (HU-COM-09, CA-08).
+ * El bridge registra las tareas programadas y aplica el firewall.
+ */
+async function aplicarNavegacion({ nodeid, scriptFile, version }) {
+  if (!isConfigured()) {
+    throw httpError(503, 'La integración con MeshCentral no está configurada.', 'MESH_NO_CONFIGURADO');
+  }
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl()}/navegacion`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ nodeid, script_file: scriptFile || null, version: version || null }),
+      signal: AbortSignal.timeout(Number(env.meshApiTimeoutMs || 15000) * 4),
+    });
+  } catch (err) {
+    throw httpError(502, `No se pudo contactar al bridge MeshCentral: ${err.message}`, 'MESH_NO_CONTACTO');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const mensaje = (payload && payload.error) || `MeshCentral respondió ${response.status}`;
+    throw httpError(502, mensaje, 'MESH_ERROR');
+  }
+
+  return {
+    ok: Boolean(payload && payload.ok),
+    codigo: payload ? payload.codigo : null,
+    salida: payload ? payload.salida : null,
+    equipoApagado: Boolean(payload && payload.error === 'EQUIPO_APAGADO'),
+    error: payload && payload.error ? payload.error : null,
+  };
+}
+
+/**
  * Estado actual de un equipo según MeshCentral. Si el bridge no responde se
  * devuelve null y el llamador conserva el estado guardado (CA-02).
  */
@@ -312,6 +354,48 @@ async function estadoEquipo(meshAgentId) {
   }
 }
 
+/**
+ * Aplica los permisos de ejecución de aplicaciones en el equipo (HU-COM-06).
+ * El bridge registra la tarea SYSTEM y ejecuta el script de ACLs.
+ */
+async function aplicarApps({ nodeid, scriptFile, version }) {
+  if (!isConfigured()) {
+    throw httpError(503, 'La integración con MeshCentral no está configurada.', 'MESH_NO_CONFIGURADO');
+  }
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl()}/apps`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ nodeid, script_file: scriptFile || null, version: version || null }),
+      signal: AbortSignal.timeout(Number(env.meshApiTimeoutMs || 15000) * 4),
+    });
+  } catch (err) {
+    throw httpError(502, `No se pudo contactar al bridge MeshCentral: ${err.message}`, 'MESH_NO_CONTACTO');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const mensaje = (payload && payload.error) || `MeshCentral respondió ${response.status}`;
+    throw httpError(502, mensaje, 'MESH_ERROR');
+  }
+
+  return {
+    ok: Boolean(payload && payload.ok),
+    codigo: payload ? payload.codigo : null,
+    salida: payload ? payload.salida : null,
+    equipoApagado: Boolean(payload && payload.error === 'EQUIPO_APAGADO'),
+    error: payload && payload.error ? payload.error : null,
+  };
+}
+
 module.exports = {
   isConfigured,
   subir,
@@ -321,4 +405,6 @@ module.exports = {
   estados,
   estadoEquipo,
   aplicarPolitica,
+  aplicarNavegacion,
+  aplicarApps,
 };

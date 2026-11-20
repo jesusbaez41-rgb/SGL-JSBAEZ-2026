@@ -59,6 +59,17 @@ const env = {
   // HU-COM-07: directorio base para rutas relativas de instaladores.
   appsInstallersDir: process.env.APPS_INSTALLERS_DIR || '/opt/sgl-instaladores',
 
+  // HU-COM-09: filtrado de navegación (RN-016).
+  // Proxy Squid del servidor SGL que aplican las PCs de los laboratorios.
+  navProxyHost: process.env.NAV_PROXY_HOST || '192.168.100.58',
+  navProxyPort: Number(process.env.NAV_PROXY_PORT || 3128),
+  // Base pública de la API que usa el agente de la PC.
+  navApiBase: process.env.NAV_API_BASE || 'http://192.168.100.58:8080/api',
+  // Clave compartida con el agente de navegación (x-agent-key).
+  navAgentKey: process.env.NAV_AGENT_KEY || '',
+  // Una sesión de PC se considera vigente durante N horas.
+  navSessionHours: Number(process.env.NAV_SESSION_HOURS || 12),
+
   // HU-COM-08: barrido de reintento de equipos encendidos (minutos, 0 desactiva).
   deploymentsRetryMinutes: Number(process.env.DEPLOYMENTS_RETRY_MINUTES || 2),
   // HU-COM-08: espera maxima de una orden remota MeshCentral.

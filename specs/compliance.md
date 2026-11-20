@@ -1,7 +1,7 @@
 # Matriz de cumplimiento — SGL
 
-**Última revisión:** 2026-11-05  
-**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), administración de grupos y membresías (HU-COM-05), catálogo de aplicaciones e instaladores (HU-COM-07), specs.
+**Última revisión:** 2026-11-19  
+**Alcance:** Samba AD, carpetas privadas, stack SGL web, PostgreSQL, autenticación web (HU-COM-14), CRUD de usuarios (HU-COM-02), autenticación de PC cliente/GPO (HU-COM-01), laboratorios/equipos y MeshCentral (HU-COM-03), registro y monitoreo de PCs con agente (HU-COM-04), administración de grupos y membresías (HU-COM-05), catálogo de aplicaciones e instaladores (HU-COM-07), filtrado de navegación por listas blancas (HU-COM-09), specs.
 
 ## Resultado global
 
@@ -25,8 +25,9 @@
 | Catálogo de aplicaciones e instaladores (HU-COM-07) | **Implementado** (SHA-256, metadatos y vínculos por laboratorio) |
 | Despliegue remoto de aplicaciones (HU-COM-08) | **Implementado** (despliegue masivo vía MeshCentral, estado por equipo y reintentos) |
 | Permisos por grupo y políticas de ejecución (HU-COM-06) | **Implementado** (matriz app × grupo, AppLocker y despliegue a las PCs) |
+| Filtrado de navegación por listas blancas (HU-COM-09) | **Implementado** (listas por grupo, unión, proxy Squid, firewall local y despliegue) |
 | MeshCentral + `/mesh` | **Funciona** (agente `sgl-win` conectado y sincronizado) |
-| Esquema PostgreSQL | 19 tablas + triggers de inmutabilidad |
+| Esquema PostgreSQL | 23 tablas + triggers de inmutabilidad |
 | Specs RN-001…RN-020 | **Presentes** |
 
 ## HU-COM-14 — estado de criterios de aceptación
@@ -303,15 +304,17 @@ El detalle está en `specs/hu-08.md`.
 |---|---|---|---|
 | CA-01 | Restricción por defecto (RN-008) | ✓ | `permiso_app_grupo.habilitado DEFAULT FALSE`; ausencia = `false` en la matriz |
 | CA-02 | Unión de permisos (RN-013) | ✓ | `policies.service.efectivos` (unión por laboratorio) |
-| CA-03 | Bloqueo efectivo (RN-009) | ✓ | Política AppLocker `EnforcementMode="Enabled"` con reglas `Allow` por SID + publisher de Microsoft, rutas System32/SystemApps/WindowsApps y colección Appx (WindowsApps/SystemApps/ImmersiveControlPanel) |
-| CA-04 | Aplicación de políticas en la PC | ✓ | `Set-AppLockerPolicy -XmlPolicy` + `AppIDSvc` activo |
-| CA-05 | Bloqueo local y registro del intento | ✓ | AppLocker bloquea y registra en su Event Log |
+| CA-03 | Bloqueo efectivo (RN-009) | ✓ verificado en PC | Windows 10 Pro no tiene AppLocker: ACL de NTFS `deny (X)` por SID de grupo sobre la carpeta de cada app no habilitada; verificado en `sgl-win` (WinRAR `CLOCKWORK\GRP-1A:(DENY)(S,X)`, 7-Zip sin deny) |
+| CA-04 | Aplicación de políticas en la PC | ✓ verificado | Tarea `SGL-Apps` (SYSTEM, `AtStartup`) + ejecución inmediata al desplegar; log `apps.log` (`2 bloqueo(s), 0 fallo(s)`) |
+| CA-05 | Bloqueo local y registro del intento | ⏳ parcial | El bloqueo es local (ACL); falta un visor de intentos (no hay Event Log de AppLocker en Pro) |
 | CA-06 | Unión de permisos del estudiante | ✓ | `GET /api/policies/users/:id/effective` |
-| CA-07 | Generación de políticas | ✓ | `policies.service.generar` + XML por grupo y por laboratorio |
-| CA-08 | Despliegue vía MeshCentral | ✓ | `POST /api/policies/:id/deploy` → bridge `/politica` |
+| CA-07 | Generación de políticas | ✓ | `policies.service.generar` + `construirScriptApps` (ACL) y XML AppLocker como registro |
+| CA-08 | Despliegue vía MeshCentral | ✓ verificado en PC | `POST /api/policies/:id/deploy` → bridge `/apps` → `COMPLETADO` en `sgl-win` |
 | CA-09 | Auditoría del despliegue | ✓ | Eventos `CAMBIO_PERMISO`, `EJECUTAR` y `DESPLEGAR` |
 
-**Resumen HU-COM-06:** 9 CA cumplidos · 0 pendientes.
+**Resumen HU-COM-06:** 9 CA implementados; el bloqueo efectivo está verificado
+en `sgl-win` con ACL por SID (CA-03/CA-04/CA-08). Queda pendiente un visor de
+intentos bloqueados (CA-05), porque Windows 10 Pro no incluye AppLocker.
 
 **Decisiones de diseño:**
 
@@ -351,21 +354,21 @@ El detalle está en `specs/hu-06.md`.
 | RN-005 | Cubierta (infra + API) | El agente se instala como servicio Windows `LocalSystem` (`docs/agent-windows.md`); las órdenes viajan por `meshctrl RunCommand --powershell` (HU-COM-08) | — |
 | RN-006 | Cubierta (BD + API) | `despliegue_equipo.estado/intentos/mensaje_error`; `equipo.estado/ultimo_reporte` (HU-COM-03/HU-COM-04); reintento individual (`POST /:id/retry` con `equipo_id`) y masivo, más barrido automático de los equipos que se encienden (HU-COM-08) | — |
 | RN-007 | Cubierta (BD + API) | `app_nombre` + índice único parcial `(lower(app_nombre), laboratorio_id) WHERE activo`; `apps.service.link` rechaza otra versión activa y permite históricas inactivas | — |
-| RN-008 | Cubierta (BD + API + PC) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo no crea permisos; la política AppLocker usa `EnforcementMode="Enabled"` y deniega por defecto lo no autorizado (HU-COM-06) | — |
-| RN-009 | Cubierta (PC + API) | AppLocker aplica reglas `Allow` por SID de grupo y bloquea el resto; el despliegue y los cambios de permisos se auditan. El Event Log de AppLocker queda disponible en la PC (HU-COM-06) | Mostrar los intentos bloqueados en SGL |
-| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + consulta de acciones administrativas en `/api/audit/logs` con filtros y UI (HU-COM-12) + triggers UPDATE/DELETE/TRUNCATE + rol `sgl_app` sin privilegios de modificación + sync automático marcado `origen=SISTEMA` + auditoría de usuarios, laboratorios/equipos, grupos, apps, despliegues y políticas | Auditar logon de PC en SGL (HU-COM-01) y listas blancas (RN-016) |
+| RN-008 | Cubierta (BD + API + PC) | `permiso_app_grupo.habilitado DEFAULT FALSE`; el vínculo no crea permisos; las ACL de ejecución se generan solo para las apps habilitadas por grupo y el resto se deniega (HU-COM-06) | — |
+| RN-009 | Cubierta (PC + API) | ACL de NTFS `deny (X)` por SID de grupo sobre la carpeta de cada app no habilitada; verificado en `sgl-win`; el despliegue y los cambios de permisos se auditan (HU-COM-06) | Mostrar los intentos bloqueados en SGL |
+| RN-010 | Parcial | `auditoria` inmutable + `evento_autenticacion` append-only (login/logout/fallos/403) + consulta de acciones administrativas en `/api/audit/logs` con filtros y UI (HU-COM-12) + triggers UPDATE/DELETE/TRUNCATE + rol `sgl_app` sin privilegios de modificación + sync automático marcado `origen=SISTEMA` + auditoría de usuarios, laboratorios/equipos, grupos, apps, despliegues, políticas y listas blancas de navegación (HU-COM-09) | Auditar logon de PC en SGL (HU-COM-01) |
 | RN-011 | Cubierta (BD + API + Samba AD) | `grupo.codigo UNIQUE`; validación en `groups.service` y `ldap.findGroupByCode`; `GRP-1A` creado en Samba AD y BD | — |
 | RN-012 | Cubierta (BD + API + Samba AD) | `membresia_grupo` N:M; alta/baja por API y sincronización con `member` de Samba AD; múltiple membresía | — |
 | RN-013 | Cubierta (API) | `GET /api/policies/users/:id/effective` devuelve la unión de apps de todos los grupos activos del estudiante, agrupada por laboratorio (HU-COM-06) | — |
 | RN-014 | Cubierta (BD + API) | FK `ON DELETE CASCADE` en membresías/asignaciones; `groups.service.remove` elimina el grupo en Samba AD y las relaciones, sin borrar usuarios | — |
 | RN-015 | Cubierta (API + UI) | `groups.service.addStudent` exige `rol = ESTUDIANTE`; `addTeacher` exige `rol = DOCENTE` y usa `asignacion_docente`; la UI filtra por rol | Trigger de BD como defensa en profundidad |
-| RN-016 | Parcial | Tabla `lista_blanca_url` por grupo | Unión de listas + proxy/firewall |
+| RN-016 | Cubierta (BD + API + UI + proxy) | `lista_blanca_url` por grupo; `whitelists.service.efectivas` devuelve la unión de los grupos activos; `construirSquidConfig` aplica deny-by-default con ACLs por IP de sesión y grupo; `POST /api/navigation/session` registra la sesión de la PC; firewall del agente bloquea salida directa, QUIC, DNS externo y VPN; pantalla **Listas blancas** (HU-COM-09) | Prueba de navegación con sesión real de estudiante en `sgl-win` |
 | RN-017 | Parcial | Docente limitado a sus grupos en `/users`, `/dashboard/summary`, `/monitoring/overview` y `/groups` (lista/detalle); asignación docente en `asignacion_docente` (HU-COM-05) | Validación antes de abrir KVM/MeshCentral |
 | RN-018 | Cubierta (infra) | Samba AD, Docker, MeshCentral y agente Windows operativos; gestión central de inventario y estado | — |
 | RN-019 | Parcial (infra, desvío) | `enp0s3` es puente a **Wi-Fi**; `enp0s8` es la red interna `sgl` | Administración por Ethernet (no Wi-Fi); topología física de laboratorio |
-| RN-020 | Parcial | Lectura de `sesion_activa` en panel docente (RN-017); 0 filas registradas | Registro automático al login de la PC (HU-COM-01) |
+| RN-020 | Cubierta (API) | `POST /api/navigation/session` registra usuario, equipo, IP y grupos en `sesion_activa` al iniciar sesión en la PC; el panel docente ya consume esas sesiones (HU-COM-09) | Prueba de navegación con sesión real de estudiante en `sgl-win` |
 
-**Resumen:** 15 cubiertas · 5 parciales · 0 pendientes.
+**Resumen:** 17 cubiertas · 3 parciales · 0 pendientes.
 
 ## Observaciones
 
@@ -373,8 +376,8 @@ El detalle está en `specs/hu-06.md`.
 2. **RN-006:** la regla usa `Instalado/Fallido/Pendiente`; el esquema usa `COMPLETADO/EN_PROCESO/FALLIDO/PENDIENTE`. Mapeo: `COMPLETADO = Instalado`.
 3. **RN-015:** el bootstrap respeta la regla, pero la BD todavía no impide por sí sola asignar un docente a `membresia_grupo`. Falta trigger o servicio de asignación.
 4. **RN-010:** `auditoria.usuario_id` es `NOT NULL`; las acciones del sistema necesitan un usuario técnico. Los eventos de autenticación usan una tabla separada (`evento_autenticacion`) porque los intentos fallidos pueden no tener usuario.
-5. **RN-004/RN-013/RN-016:** requieren una capa de cálculo de permisos (unión de grupos) que aún no existe.
-6. **RN-017/RN-020:** HU-COM-14 implementa la parte de consulta y autorización; la apertura de KVM y el registro automático de sesión desde la PC quedan para sus HU.
+5. **RN-004/RN-013/RN-016:** la capa de unión de grupos ya existe para aplicaciones (HU-COM-06, `policies.service.efectivos`) y para navegación (HU-COM-09, `whitelists.service.efectivas` y `construirSquidConfig`).
+6. **RN-017/RN-020:** HU-COM-14 implementa la consulta y autorización docente; HU-COM-09 implementa el registro automático de la sesión de la PC (`POST /api/navigation/session`). La apertura de KVM queda para su HU específica.
 7. **HU-COM-02 — contraseñas:** Samba AD mantiene la contraseña anterior válida durante `old password allowed period` (60 min por defecto). Se configuró `old password allowed period = 0` en `/etc/samba/smb.conf` para que el cambio sea inmediato; respaldo en `smb.conf.bak-hu02`.
 8. **HU-COM-02 — trigger de auditoría:** la migración `03-hu02-auth-fk.sql` permite solo la anonimización de `evento_autenticacion.usuario_id` (`ON DELETE SET NULL`) al eliminar una cuenta; `UPDATE`/`DELETE` generales siguen bloqueados.
 9. **HU-COM-01 — alcance:** la parte web (CA-01/02/08/10/11) ya está cubierta por HU-COM-14. El trabajo pendiente es la PC cliente Windows (CA-04/09), la carga de perfil/GPO por rol (CA-05) y el registro de sesión de PC (CA-06).
@@ -390,6 +393,7 @@ El detalle está en `specs/hu-06.md`.
 17. **HU-COM-12 — rol de aplicación:** el backend dejó de usar `sgl_user` (superusuario) y conecta como `sgl_app`, con `SELECT/INSERT/UPDATE/DELETE` en el esquema pero solo `SELECT/INSERT` en `auditoria` y `evento_autenticacion`. `DB_APP_PASSWORD` vive en `.env` (600) y `scripts/bootstrap-hu12.sh` aplica la migración 10 y el password. `sgl_user` queda para migraciones/mantenimiento.
 18. **HU-COM-12 — sincronizaciones:** el job de MeshCentral marca sus eventos con `detalle.origen='SISTEMA'` y no audita corridas sin cambios. La UI oculta las sincronizaciones de inventario por defecto (`excluir_sincronizacion=1`), pero se pueden mostrar desmarcando el filtro.
 19. **HU-COM-12 — instalación limpia:** se corrigió `db/init/01-init.sql` (el `CHECK` de `laboratorio.subred` y el `$$` de la función de truncate, heredados de HU-06) y se validó el init completo en una base temporal `sgl_init_test`, con `sgl_app=ar` sobre `auditoria` y los triggers de UPDATE/DELETE/TRUNCATE. Las columnas de contexto `laboratorio_id`/`equipo_id` no tienen FK para no bloquear el borrado de un laboratorio/equipo con historial.
+20. **HU-COM-09 — filtrado de navegación:** Squid corre en el contenedor `sgl-squid` (imagen `ubuntu/squid`, red del host) y escucha en `192.168.100.58:3128`, con `http_access deny all` al final. `google.com` está siempre habilitado para los grupos (`DOMINIOS_BASE`). Verificado desde `sgl-win`: `google.com` y `wikipedia.org` → `301`, `example.com` → `403`, IP literal → `403`. El backend publica `/opt/sgl-instaladores/sgl-squid.conf`; `sgl-squid-sync.timer` (cada 10 s) valida el candidato dentro del contenedor con `squid -k parse` y solo entonces escribe la configuración viva (mismo inodo del bind mount) y recarga, por lo que un cambio inválido conserva la configuración anterior. El despliegue en `sgl-win` terminó `COMPLETADO` (`SGL_EXITCODE=0`) y la PC tiene 14 reglas `SGL-Nav-*`: Windows Firewall rechaza un SID suelto en `-LocalUser`, así que el script usa SDDL `D:(A;;CC;;;<SID>)` sobre el SID de cada estudiante activo y deja fuera al SID de administradores; el log registra `aplicado a 2 de 2 usuario(s)`. `NAV_AGENT_KEY` se guarda en `.env` (600) y viaja en el script publicado: debe rotarse si se filtra. La identificación es por IP informada por el agente, acotada a grupos registrados.
 
 ## HU-COM-12 — estado de criterios de aceptación
 
@@ -402,13 +406,40 @@ El detalle está en `specs/hu-06.md`.
 | CA-05 | Inmutabilidad desde la API | ✓ | Solo `GET /logs` y `GET /events`; triggers de BD para UPDATE/DELETE/TRUNCATE |
 | CA-06 | Almacenamiento seguro | ✓ | Backend conecta como `sgl_app` (sin UPDATE/DELETE/TRUNCATE sobre auditoría); PostgreSQL no expuesto |
 
-**Resumen HU-COM-12:** 6 CA cubiertos · 0 pendientes. Las listas blancas se integrarán cuando se implemente RN-016.
+**Resumen HU-COM-12:** 6 CA cubiertos · 0 pendientes. Las listas blancas de RN-016 quedan cubiertas por HU-COM-09.
 
 **Decisiones de diseño:**
 - La consulta de auditoría vive en `audit.service.listAuditLogs` con `findAndCountAll`, joins a usuario/laboratorio/equipo y filtros server-side.
 - La inmutabilidad combina tres capas: API de solo lectura, triggers de BD y un rol de aplicación no superusuario.
 - La sincronización periódica de MeshCentral se marca `origen=SISTEMA`, omite corridas sin cambios y la UI la oculta por defecto; la sincronización manual queda como `USUARIO`.
 - `audit:read` se habilita también para el Admin Técnico (HU-COM-12), manteniendo el acceso del Admin Académico.
+
+## HU-COM-09 — estado de criterios de aceptación
+
+| CA | Requisito | Estado | Evidencia |
+|---|---|---|---|
+| CA-01 | Despliegue local vía MeshCentral | ✓ verificado en PC | Despliegue sobre `sgl-win` → `COMPLETADO`, `SGL_VERSION=43609d34cf1b2fd7`, `SGL_EXITCODE=0` |
+| CA-02 | Bloqueo inmediato fuera de lista | ✓ proxy real · ⏳ navegación del estudiante | `wikipedia.org`/`python.org` → `301`, `example.com` → `403`; `http_access deny all` final |
+| CA-03 | Resistencia a IP directa / proxy / VPN | ✓ proxy real · ✓ reglas en PC | IP literal → `403 TCP_DENIED`; `deny sgl_numeric_host`; firewall por SID de estudiante (14 reglas `SGL-Nav-*`) |
+| CA-04 | Configuración según grupo en sesión | ✓ | `POST /api/navigation/session` actualiza `sesion_activa.ip_origen/grupos` y regenera Squid |
+| CA-05 | Bloqueo inmediato de dominios no permitidos | ✓ proxy real · ⏳ navegación del estudiante | Squid responde `ERR_ACCESS_DENIED`; firewall impide la salida directa |
+| CA-06 | Resistencia a evasión desde la PC | ✓ verificado en PC | Reglas con `-LocalUser 'D:(A;;CC;;;<SID>)'` (SDDL) + `-RemoteAddress Internet`; log `aplicado a 2 de 2 usuario(s)`; exención solo `S-1-5-32-544` |
+| CA-07 | Generación de configuración en backend | ✓ | `whitelists.config` genera Squid, SquidGuard, PAC y script de PC |
+| CA-08 | Despliegue por laboratorio y grupo | ✓ | `/generate` + `/generated/:id/deploy`, estado por equipo en `navegacion_despliegue` |
+| CA-09 | Redespliegue automático al cambiar lista | ✓ | `programarSincronizacion` + auditoría `REDESPLEGUE_AUTOMATICO` |
+
+**Resumen HU-COM-09:** 9 CA implementados; proxy central verificado de extremo a
+extremo y despliegue `COMPLETADO` en `sgl-win` con las 14 reglas de firewall por
+SID de estudiante. Queda pendiente la prueba de navegación con sesión iniciada
+como estudiante (el terminal remoto corre como SYSTEM y la cuenta demo no tiene
+el privilegio *Iniciar sesión como trabajo por lotes*).
+
+**Decisiones de diseño:**
+- El filtrado vive en un Squid central porque una PC puede evadir reglas locales; el firewall local solo garantiza que el tráfico salga por el proxy.
+- La configuración se publica como archivo y un timer del host la valida antes de recargar: un error de generación nunca deja el proxy sin servicio.
+- La sesión de la PC se registra como `sesion_activa` (reutilizada de HU-COM-01) para que el panel docente y el filtrado compartan la misma fuente.
+- La exención de administrador se implementa por SID, igual que en HU-COM-06, para no bloquear la operación del equipo.
+
 
 ## Qué significa "Cubierta (BD)"
 

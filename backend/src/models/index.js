@@ -16,6 +16,12 @@ const PermisoAppGrupo = require('./permisoAppGrupo.model');
 const PoliticaEjecucion = require('./politicaEjecucion.model');
 const PoliticaLaboratorio = require('./politicaLaboratorio.model');
 const PoliticaDespliegue = require('./politicaDespliegue.model');
+// HU-COM-09: listas blancas, filtrado y sesiones de navegación.
+const ListaBlancaUrl = require('./listaBlancaUrl.model');
+const ConfigFiltrado = require('./configFiltrado.model');
+const SesionActiva = require('./sesionActiva.model');
+const NavegacionLaboratorio = require('./navegacionLaboratorio.model');
+const NavegacionDespliegue = require('./navegacionDespliegue.model');
 
 // HU-COM-12: la auditoria se consulta con el actor y el contexto.
 Auditoria.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
@@ -91,6 +97,35 @@ PoliticaDespliegue.belongsTo(PoliticaLaboratorio, { foreignKey: 'politica_id', a
 PoliticaDespliegue.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
 Equipo.hasMany(PoliticaDespliegue, { foreignKey: 'equipo_id', as: 'politicas' });
 
+// HU-COM-09: listas blancas por grupo, configuración de filtrado y sesiones.
+Grupo.hasMany(ListaBlancaUrl, { foreignKey: 'grupo_id', as: 'listaBlanca' });
+ListaBlancaUrl.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
+ListaBlancaUrl.belongsTo(Usuario, { foreignKey: 'creado_por', as: 'autor' });
+
+Grupo.hasMany(ConfigFiltrado, { foreignKey: 'grupo_id', as: 'configFiltrado' });
+ConfigFiltrado.belongsTo(Grupo, { foreignKey: 'grupo_id', as: 'grupo' });
+Laboratorio.hasMany(ConfigFiltrado, { foreignKey: 'laboratorio_id', as: 'configFiltrado' });
+ConfigFiltrado.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+
+Laboratorio.hasMany(NavegacionLaboratorio, { foreignKey: 'laboratorio_id', as: 'navegacion' });
+NavegacionLaboratorio.belongsTo(Laboratorio, { foreignKey: 'laboratorio_id', as: 'laboratorio' });
+NavegacionLaboratorio.belongsTo(Usuario, { foreignKey: 'generada_por', as: 'autor' });
+NavegacionLaboratorio.hasMany(NavegacionDespliegue, {
+  foreignKey: 'navegacion_id',
+  as: 'despliegues',
+});
+NavegacionDespliegue.belongsTo(NavegacionLaboratorio, {
+  foreignKey: 'navegacion_id',
+  as: 'navegacion',
+});
+NavegacionDespliegue.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
+Equipo.hasMany(NavegacionDespliegue, { foreignKey: 'equipo_id', as: 'navegacionDespliegues' });
+
+SesionActiva.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+SesionActiva.belongsTo(Equipo, { foreignKey: 'equipo_id', as: 'equipo' });
+Usuario.hasMany(SesionActiva, { foreignKey: 'usuario_id', as: 'sesiones' });
+Equipo.hasMany(SesionActiva, { foreignKey: 'equipo_id', as: 'sesiones' });
+
 module.exports = {
   sequelize,
   Usuario,
@@ -110,4 +145,9 @@ module.exports = {
   PoliticaEjecucion,
   PoliticaLaboratorio,
   PoliticaDespliegue,
+  ListaBlancaUrl,
+  ConfigFiltrado,
+  SesionActiva,
+  NavegacionLaboratorio,
+  NavegacionDespliegue,
 };

@@ -9,3 +9,7 @@ frontend/static/*.exe
 backend/uploads/*
 !backend/uploads/.gitkeep
 .DS_Store
+
+# HU-COM-09: configuracion viva del proxy (la genera el backend)
+squid/squid.conf
+squid/*.bak

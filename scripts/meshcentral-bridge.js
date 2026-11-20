@@ -528,9 +528,70 @@ async function deployToDevice(payload) {
 
 
 /**
+ * Aplica los permisos de ejecucion por grupo (HU-COM-06, CA-03).
+ *
+ * Windows 10 Pro no incluye AppLocker (no existe AppIDSvc), asi que el
+ * bloqueo se hace con ACLs de NTFS: deny (X) sobre las carpetas de apps que
+ * el grupo no tiene habilitadas. Se ejecuta ahora y en cada arranque.
+ */
+async function aplicarApps(nodeid, scriptFile, version) {
+  const urlScript = `${INSTALADORES_URL.replace(/\/$/, '')}/${encodeURIComponent(
+    scriptFile || 'sgl-apps.ps1',
+  )}`;
+  const ruta = 'C:\\ProgramData\\SGL\\SGL-Apps.ps1';
+
+  const comando = [
+    "$ErrorActionPreference='Stop'",
+    "New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null",
+    `Invoke-WebRequest -Uri '${urlScript}' -OutFile '${ruta}' -UseBasicParsing`,
+    // La politica anterior restringia el shell (Inicio, busqueda, Panel de
+    // control): se retira para no romper Windows.
+    "Unregister-ScheduledTask -TaskName 'SGL-Lockdown' -Confirm:$false -ErrorAction SilentlyContinue",
+    "Remove-Item 'C:\\ProgramData\\SGL\\SGL-Lockdown.ps1' -Force -ErrorAction SilentlyContinue",
+    `powershell.exe -NoProfile -ExecutionPolicy Bypass -File '${ruta}'`,
+    "$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\ProgramData\\SGL\\SGL-Apps.ps1'",
+    "$p = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest",
+    "$t = New-ScheduledTaskTrigger -AtStartup",
+    "Register-ScheduledTask -TaskName 'SGL-Apps' -Action $a -Principal $p -Trigger $t -Force | Out-Null",
+    `Write-Output 'SGL_VERSION=${String(version || '').replace(/[^a-zA-Z0-9.-]/g, '')}'`,
+    "Write-Output 'SGL_EXITCODE=0'",
+  ].join('; ');
+
+  return runCommandOnDevice(nodeid, comando, 90000);
+}
+
+/**
  * Aplica una política AppLocker en el equipo (HU-COM-06).
  * Guarda el XML, habilita el servicio AppIDSvc y aplica la política local.
  */
+async function aplicarNavegacion(nodeid, scriptFile, version) {
+  const urlScript = `${INSTALADORES_URL.replace(/\/$/, '')}/${encodeURIComponent(
+    scriptFile || 'sgl-navegacion.ps1',
+  )}`;
+  const ruta = 'C:\\ProgramData\\SGL\\SGL-Navegacion.ps1';
+
+  const comando = [
+    "$ErrorActionPreference='Stop'",
+    "New-Item -ItemType Directory -Force -Path 'C:\\ProgramData\\SGL' | Out-Null",
+    `Invoke-WebRequest -Uri '${urlScript}' -OutFile '${ruta}' -UseBasicParsing`,
+    // CA-06: el firewall se aplica como SYSTEM al arrancar y ahora mismo.
+    "$fw = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\ProgramData\\SGL\\SGL-Navegacion.ps1 -Modo Firewall'",
+    "$fwUser = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest",
+    "$fwTrigger = New-ScheduledTaskTrigger -AtStartup",
+    "Register-ScheduledTask -TaskName 'SGL-Navegacion-Firewall' -Action $fw -Principal $fwUser -Trigger $fwTrigger -Force | Out-Null",
+    // CA-04: al iniciar sesión se registra el usuario y se configura el proxy.
+    "$ses = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\ProgramData\\SGL\\SGL-Navegacion.ps1 -Modo Sesion'",
+    "$sesUser = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited",
+    "$sesTrigger = New-ScheduledTaskTrigger -AtLogOn",
+    "Register-ScheduledTask -TaskName 'SGL-Navegacion-Sesion' -Action $ses -Principal $sesUser -Trigger $sesTrigger -Force | Out-Null",
+    "Start-ScheduledTask -TaskName 'SGL-Navegacion-Firewall' -ErrorAction SilentlyContinue",
+    `Write-Output 'SGL_VERSION=${String(version || '').replace(/[^a-zA-Z0-9.-]/g, '')}'`,
+    "Write-Output 'SGL_EXITCODE=0'",
+  ].join('; ');
+
+  return runCommandOnDevice(nodeid, comando, 60000);
+}
+
 async function aplicarPolitica(nodeid, xml, nombre, scriptFile, xmlFile) {
   const base64 = Buffer.from(String(xml || ''), 'utf8').toString('base64');
   const destino = `${REMOTE_TEMP_DIR}\\sgl-politica-${nombre || 'actual'}.xml`;
@@ -756,6 +817,58 @@ const server = http.createServer(async (req, res) => {
         body.script_file,
         body.xml_file,
       );
+
+      if (equipoSinConexion(salida)) {
+        sendJson(res, 200, { ok: false, error: 'EQUIPO_APAGADO', salida: String(salida || '').trim() });
+        return;
+      }
+
+      const codigo = parseExitCode(salida);
+      sendJson(res, 200, {
+        ok: codigo === 0,
+        codigo,
+        salida: String(salida || '').trim(),
+      });
+    } catch (err) {
+      console.error('[mesh-bridge]', err.message);
+      sendJson(res, 502, { error: err.message });
+    }
+    return;
+  }
+
+  // HU-COM-09: aplica la configuración de navegación (firewall + proxy).
+  if (url.pathname === '/navegacion' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const nodeid = String(body.nodeid || '').trim();
+      if (!nodeid) throw new Error('Falta el identificador del equipo (nodeid)');
+      const salida = await aplicarNavegacion(nodeid, body.script_file, body.version);
+
+      if (equipoSinConexion(salida)) {
+        sendJson(res, 200, { ok: false, error: 'EQUIPO_APAGADO', salida: String(salida || '').trim() });
+        return;
+      }
+
+      const codigo = parseExitCode(salida);
+      sendJson(res, 200, {
+        ok: codigo === 0,
+        codigo,
+        salida: String(salida || '').trim(),
+      });
+    } catch (err) {
+      console.error('[mesh-bridge]', err.message);
+      sendJson(res, 502, { error: err.message });
+    }
+    return;
+  }
+
+  // HU-COM-06: permisos de ejecucion por grupo (ACL por SID).
+  if (url.pathname === '/apps' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const nodeid = String(body.nodeid || '').trim();
+      if (!nodeid) throw new Error('Falta el identificador del equipo (nodeid)');
+      const salida = await aplicarApps(nodeid, body.script_file, body.version);
 
       if (equipoSinConexion(salida)) {
         sendJson(res, 200, { ok: false, error: 'EQUIPO_APAGADO', salida: String(salida || '').trim() });

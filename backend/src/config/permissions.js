@@ -37,6 +37,9 @@ const ROLE_PERMISSIONS = Object.freeze({
     'deployments:manage',
     'policies:read',
     'policies:manage',
+    // HU-COM-09: el Admin Técnico también administra las listas blancas.
+    'whitelists:read',
+    'whitelists:manage',
     // HU-COM-12: consulta del registro de auditoria.
     'audit:read',
   ]),

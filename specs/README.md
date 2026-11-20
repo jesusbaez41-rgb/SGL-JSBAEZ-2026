@@ -18,6 +18,7 @@ Es **normativa vinculante**: cualquier cambio en el sistema debe respetarla.
 | `hu-06.md` | HU-COM-06: permisos de aplicaciones por grupo, ejecución y bloqueo con AppLocker. |
 | `hu-07.md` | HU-COM-07: catálogo de aplicaciones e instaladores con verificación SHA-256 y vínculos a laboratorios. |
 | `hu-08.md` | HU-COM-08: despliegue remoto de aplicaciones (instalación/desinstalación masiva vía MeshCentral). |
+| `hu-09.md` | HU-COM-09: control de navegación por listas blancas de URLs (RN-016, Squid + firewall local). |
 | `hu-12.md` | HU-COM-12: auditoría y trazabilidad inmutable (consulta, filtros, inmutabilidad y rol de aplicación). |
 | `diagrama-clases.md` | Diagrama de clases UML del dominio, servicios backend y frontend (PlantUML/Mermaid). |
 

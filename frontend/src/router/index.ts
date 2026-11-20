@@ -55,7 +55,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'listas-blancas',
         name: 'listas-blancas',
-        component: () => import('../views/common/ModulePlaceholderView.vue'),
+        component: () => import('../views/whitelists/WhitelistsView.vue'),
         meta: { permission: 'whitelists:read', title: 'Listas blancas' },
       },
       {
